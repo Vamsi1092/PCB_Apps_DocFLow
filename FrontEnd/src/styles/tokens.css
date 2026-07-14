@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PCB design tokens — ported near-verbatim from the source design's
+   PCB.LIGHT / PCB.NIGHT token maps (src/theme.js) so every page can keep
+   styling against the same var(--token) names. */
+:root {
+  --navy: #1E3A8A;
+  --navy2: #3B5BA9;
+  --bg: #F8F9FB;
+  --surface: #ffffff;
+  --surface2: #fafbfd;
+  --surface3: #f2f5fb;
+  --border: #e6e9ef;
+  --border2: #eef1f6;
+  --borderf: #f3f5f9;
+  --line: #d7dce6;
+  --text: #1a2233;
+  --text2: #334155;
+  --text3: #475569;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --tint: #eef2fb;
+  --redsoft: #FEF2F2;
+  --greensoft: #F0FDF4;
+
+  /* semantic accents — fixed regardless of theme (color must always mean the same thing) */
+  --red: #DC2626;
+  --green: #16A34A;
+
+  --radius: 0.75rem;
+
+  /* shadcn/ui bridge — reuse the same hex tokens above (not the hsl() convention) */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--navy);
+  --primary-foreground: #ffffff;
+  --secondary: var(--tint);
+  --secondary-foreground: var(--text2);
+  --muted-bg: var(--surface2);
+  --muted-foreground: var(--muted);
+  --accent: var(--tint);
+  --accent-foreground: var(--navy);
+  --destructive: var(--red);
+  --destructive-foreground: #ffffff;
+  --success: var(--green);
+  --success-foreground: #ffffff;
+  --input: var(--line);
+  --ring: var(--navy);
+}
+
+.dark {
+  --bg: #0d1524;
+  --surface: #161f30;
+  --surface2: #1b2536;
+  --surface3: #212d42;
+  --border: #2a3750;
+  --border2: #243149;
+  --borderf: #1f2a3e;
+  --line: #33405a;
+  --text: #e9eef6;
+  --text2: #c8d1df;
+  --text3: #b1bccd;
+  --muted: #8a98ad;
+  --faint: #6b7a91;
+  --tint: #1e2b45;
+  --redsoft: #3a1d21;
+  --greensoft: #123021;
+  --navy2: #5b7bc9;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background .25s ease, color .25s ease;
+}
+a {
+  color: #1E3A8A;
+  text-decoration: none;
+}
+a:hover {
+  color: #17307a;
+  text-decoration: underline;
+}
+button {
+  font-family: inherit;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d3d9e4;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #bcc4d4;
+}
+
+@keyframes pcbShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes pcbFlow {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+@keyframes pcbPulse {
+  0%, 100% { box-shadow: 0 2px 6px rgba(30,58,138,.28), 0 0 0 0 rgba(30,58,138,.28); }
+  50% { box-shadow: 0 2px 6px rgba(30,58,138,.28), 0 0 0 7px rgba(30,58,138,0); }
+}
+@keyframes pcbSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pcbFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.pcb-view {
+  animation: pcbFade .28s ease both;
+}
+.pcb-tab:hover {
+  color: #fff !important;
+  background: rgba(255,255,255,.10) !important;
+}
+.pcb-row:hover {
+  background: var(--surface3) !important;
+}
+.pcb-cell:hover {
+  filter: brightness(.97);
+  box-shadow: 0 0 0 2px rgba(30,58,138,.18);
+}
+.pcb-node {
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1) !important;
+}
+.pcb-node:hover {
+  transform: scale(1.28) !important;
+}
+.pcb-lift {
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.pcb-lift:hover {
+  box-shadow: 0 6px 18px rgba(16,24,40,.10);
+  transform: translateY(-2px);
+}
+.pcb-btn {
+  transition: background .15s ease, box-shadow .15s ease;
+}
