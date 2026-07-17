@@ -1,2 +1,8 @@
 .env
 **/.env
+.gstack/
+README.md
+.claude/
+.code-review-graph/
+.vscode/
+email-intake-backend/

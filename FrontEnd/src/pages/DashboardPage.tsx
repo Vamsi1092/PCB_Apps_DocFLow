@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlarmClock, AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, Eye,
-  Filter, RefreshCw, Sparkles, Truck, type LucideIcon,
+  AlarmClock, AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, ChevronDown, Clock, Eye,
+  FileSearch, Filter, Inbox, Link2, Loader2, Send, Sparkles, Tag, ThumbsUp, Truck, type LucideIcon,
 } from 'lucide-react';
 import { KpiCard, type KpiAccent } from '@/components/KpiCard';
-import { GREEN, RED, sevColor } from '@/lib/theme';
-import { pipeline, sla, severity, kpiStrip } from '@/data';
+import { GREEN, RED, sevColor, type Severity } from '@/lib/theme';
+import { exceptions, kpiStrip, type AgingRow } from '@/data';
+import {
+  getDashboardKpis, getDashboardPipeline, type DashboardKpi, type DashboardDateFilter, type DashboardPipelineStage,
+} from '../../api/dashboardApi';
+import { getDocumentQueue } from '../../api/documentapi';
 
 interface KpiDef {
   icon: LucideIcon;
@@ -17,7 +21,40 @@ interface KpiDef {
   to: string;
 }
 
-const KPIS: KpiDef[] = [
+const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
+const SEVERITY_LABELS: Record<Severity, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+
+// Derived from the same `exceptions` list the Exceptions page filters against,
+// so this panel's counts can never drift out of sync with what "Triage" leads to.
+const severityCounts = SEVERITIES.map((sev) => ({
+  sev,
+  label: SEVERITY_LABELS[sev],
+  n: exceptions.filter((e) => e.sev === sev).length,
+}));
+const criticalExceptions = exceptions.filter((e) => e.sev === 'critical');
+// Highlights one real critical exception instead of a fabricated "N of M" trend
+// claim — there's no historical match-rate data to support a real trend line yet.
+const topCriticalException = criticalExceptions[0];
+const maxSeverityCount = Math.max(1, ...severityCounts.map((s) => s.n));
+
+const DEFAULT_INSIGHT = topCriticalException
+  ? `${topCriticalException.vendor} has a ${topCriticalException.type.toLowerCase()} flagged on ${topCriticalException.inv} — 1 of ${criticalExceptions.length} critical exception${criticalExceptions.length === 1 ? '' : 's'} open right now.`
+  : 'No critical exceptions open right now.';
+
+const SUGGESTED_PROMPTS = ["Summarize today's ingestion", 'What needs my attention?', 'Any documents aging past 24h?'];
+
+// Icon + click target per KPI are presentation-only and stay client-side;
+// value/label/trend/accent come from the API, keyed by `key`.
+const KPI_META: Record<string, { icon: LucideIcon; to: string }> = {
+  active_invoices: { icon: Truck, to: '/worklist' },
+  pending_review: { icon: Eye, to: '/worklist' },
+  open_exceptions: { icon: AlertTriangle, to: '/exceptions' },
+  pending_approvals: { icon: Clock, to: '/approvals' },
+  posting_ready: { icon: CheckCircle2, to: '/worklist' },
+  sla_breached: { icon: AlarmClock, to: '/worklist' },
+};
+
+const DEFAULT_KPIS: KpiDef[] = [
   { icon: Truck, value: '1,284', label: 'Active Invoices', trend: '+8.2%', accent: 'default', to: '/worklist' },
   { icon: Eye, value: '218', label: 'Pending Review', trend: '+2.4%', accent: 'default', to: '/worklist' },
   { icon: AlertTriangle, value: '87', label: 'Open Exceptions', trend: '+12', accent: 'red', to: '/exceptions' },
@@ -26,22 +63,116 @@ const KPIS: KpiDef[] = [
   { icon: AlarmClock, value: '6', label: 'SLA Breached', trend: '+3', accent: 'red', to: '/worklist' },
 ];
 
+function toKpiDefs(kpis: DashboardKpi[]): KpiDef[] {
+  return kpis
+    .filter((k) => KPI_META[k.key])
+    .map((k) => ({ ...KPI_META[k.key], value: k.value, label: k.label, trend: k.trend, accent: k.accent }));
+}
+
+const STAGE_ICONS: Record<string, LucideIcon> = {
+  Ingested: Inbox,
+  Extracted: FileSearch,
+  Matched: Link2,
+  Coded: Tag,
+  Approved: ThumbsUp,
+  Posted: Send,
+};
+
 const TIME_OPTIONS = ['Today', 'This Week', 'This Month', 'Last 100'];
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const TIME_OPTION_FILTERS: Record<string, DashboardDateFilter> = {
+  Today: 'today',
+  'This Week': 'week',
+  'This Month': 'month',
+  'Last 100': 'last100',
+};
+
+// Same age computation as the Worklist's Age column — reused here so "old" means
+// the same thing (and uses the same 24h threshold) on both pages.
+function fmtAge(iso: string): string {
+  if (!iso) return '—';
+  const created = new Date(iso).getTime();
+  if (isNaN(created)) return '—';
+  const minutes = Math.max(0, Math.round((Date.now() - created) / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function ageHours(iso: string): number {
+  const created = new Date(iso).getTime();
+  if (isNaN(created)) return 0;
+  return (Date.now() - created) / 3600000;
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [pipe, setPipe] = useState(false);
   const [count, setCount] = useState(0);
   const [tf, setTf] = useState('This Week');
+  const [dateFilter, setDateFilter] = useState<DashboardDateFilter>('week');
   const [tfOpen, setTfOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [cfrom, setCfrom] = useState('');
   const [cto, setCto] = useState('');
-  const [syncing, setSyncing] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const tt = useRef<ReturnType<typeof setTimeout>>();
-  const st = useRef<ReturnType<typeof setTimeout>>();
+  const [kpis, setKpis] = useState<KpiDef[]>(DEFAULT_KPIS);
+  const [agingRows, setAgingRows] = useState<AgingRow[]>([]);
+  const [agingFlaggedCount, setAgingFlaggedCount] = useState(0);
+  const [pipelineData, setPipelineData] = useState<DashboardPipelineStage[]>([]);
+  const [pipelineLabel, setPipelineLabel] = useState('Latest Records');
+  const [insightPrompt, setInsightPrompt] = useState('');
+  const [insightResponse, setInsightResponse] = useState(DEFAULT_INSIGHT);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const it = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (dateFilter === 'custom' && (!cfrom || !cto)) return;
+
+    getDashboardKpis({
+      dateFilter,
+      startDate: dateFilter === 'custom' ? cfrom : undefined,
+      endDate: dateFilter === 'custom' ? cto : undefined,
+    })
+      .then((res) => {
+        const mapped = toKpiDefs(res.kpis);
+        if (mapped.length) setKpis(mapped);
+      })
+      .catch(() => {});
+
+    getDashboardPipeline({
+      dateFilter,
+      startDate: dateFilter === 'custom' ? cfrom : undefined,
+      endDate: dateFilter === 'custom' ? cto : undefined,
+    })
+      .then((res) => { setPipelineData(res.stages); setPipelineLabel(res.label); })
+      .catch(() => {});
+  }, [dateFilter, cfrom, cto]);
+
+  useEffect(() => {
+    // There's no real SLA due-date anywhere in the backend (sla_due_at/sla_breached
+    // are never set), so "at risk" is redefined here as "open the longest" — the
+    // same Age signal and 24h threshold the Worklist page already uses.
+    getDocumentQueue()
+      .then((res) => {
+        const oldest = res.documents
+          .filter((d) => !!d.created_at)
+          .sort((a, b) => new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime());
+        setAgingFlaggedCount(oldest.filter((d) => ageHours(d.created_at!) >= 24).length);
+        setAgingRows(oldest.slice(0, 4).map((d) => ({
+          inv: d.document_reference ?? d.document_id,
+          vendor: d.supplier ?? '—',
+          stage: d.stage ?? '—',
+          age: fmtAge(d.created_at!),
+          amount: '$' + Math.round(d.amount ?? 0).toLocaleString('en-US'),
+          risk: ageHours(d.created_at!) >= 24 ? 'high' : 'med',
+        })));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t0 = setTimeout(() => setPipe(true), 140);
@@ -52,33 +183,62 @@ export default function DashboardPage() {
       setCount(1 - Math.pow(1 - t, 3));
       if (t >= 1) clearInterval(ci);
     }, 33);
-    return () => { clearTimeout(t0); clearInterval(ci); clearTimeout(tt.current); clearTimeout(st.current); };
+    return () => { clearTimeout(t0); clearInterval(ci); clearTimeout(it.current); };
   }, []);
 
-  const doSync = () => {
-    if (syncing) return;
-    setSyncing(true);
-    clearTimeout(st.current);
-    st.current = setTimeout(() => { setSyncing(false); setToast('Outlook synced — 6 new documents captured'); }, 1600);
-    clearTimeout(tt.current);
-    tt.current = setTimeout(() => setToast(null), 4200);
+  // Stand-in for a real backend/Claude call — answers a handful of common
+  // questions from data already on this page. Swap the body of this function
+  // for a fetch() to a real AI endpoint once one exists; the prompt UI below
+  // doesn't need to change.
+  const resolveInsight = (prompt: string): string => {
+    const q = prompt.toLowerCase();
+
+    if (q.includes('ingest') || q.includes('today')) {
+      const ingested = pipelineData.find((s) => s.name === 'Ingested')?.count ?? 0;
+      const extracted = pipelineData.find((s) => s.name === 'Extracted')?.count ?? 0;
+      return `${pipelineLabel}: ${ingested} document${ingested === 1 ? '' : 's'} ingested, ${extracted} successfully extracted so far.`;
+    }
+    if (q.includes('exception') || q.includes('critical') || q.includes('attention')) {
+      const critical = severityCounts.find((s) => s.sev === 'critical')?.n ?? 0;
+      return topCriticalException
+        ? `${critical} critical exception${critical === 1 ? '' : 's'} open — most recently ${topCriticalException.vendor}'s ${topCriticalException.type.toLowerCase()} on ${topCriticalException.inv}.`
+        : `${critical} critical exceptions open right now.`;
+    }
+    if (q.includes('sla') || q.includes('risk') || q.includes('due') || q.includes('aging') || q.includes('old')) {
+      return `${agingFlaggedCount} document${agingFlaggedCount === 1 ? '' : 's'} have been open more than 24 hours.`;
+    }
+    return "I'm not connected to a live AI backend yet — once wired up to Claude or another API, I'll be able to answer anything here.";
+  };
+
+  const askInsight = (prompt: string) => {
+    const q = prompt.trim();
+    if (!q || insightLoading) return;
+    setInsightPrompt('');
+    setInsightLoading(true);
+    clearTimeout(it.current);
+    it.current = setTimeout(() => {
+      setInsightResponse(resolveInsight(q));
+      setInsightLoading(false);
+    }, 500);
   };
 
   const applyCustom = () => {
     if (!cfrom || !cto) return;
     const f = (v: string) => { const p = v.split('-'); return MONTH_ABBR[+p[1] - 1] + ' ' + (+p[2]); };
     setTf(f(cfrom) + ' – ' + f(cto));
+    setDateFilter('custom');
     setTfOpen(false);
     setCustomOpen(false);
   };
 
   const cprog = count;
-  const pipelineSteps = pipeline.map((s, i) => ({
+  const pipelineSteps = pipelineData.map((s, i) => ({
     name: s.name,
-    n: Math.round(s.v * cprog).toLocaleString('en-US'),
+    n: Math.round(s.count * cprog).toLocaleString('en-US'),
     hasConn: i > 0,
     delay: i * 0.11,
-    isLast: i === pipeline.length - 1,
+    isLast: i === pipelineData.length - 1,
+    icon: STAGE_ICONS[s.name] ?? Check,
   }));
 
   return (
@@ -113,7 +273,7 @@ export default function DashboardPage() {
                     <button
                       key={o}
                       type="button"
-                      onClick={() => { setTf(o); setTfOpen(false); setCustomOpen(false); }}
+                      onClick={() => { setTf(o); setDateFilter(TIME_OPTION_FILTERS[o]); setTfOpen(false); setCustomOpen(false); }}
                       className="flex h-9 w-full items-center justify-between gap-2.5 rounded-[7px] border-none px-[11px] text-[13px]"
                       style={{ background: on ? 'var(--tint)' : 'transparent', color: on ? 'var(--navy)' : 'var(--text2)', fontWeight: on ? 700 : 500 }}
                     >
@@ -163,21 +323,11 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={doSync}
-            className="pcb-btn flex h-[38px] items-center gap-2 rounded-[9px] border-none bg-navy px-4 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(30,58,138,.3)]"
-          >
-            <span className="flex origin-center" style={{ animation: syncing ? 'pcbSpin .8s linear infinite' : 'none' }}>
-              <RefreshCw size={15} />
-            </span>
-            {syncing ? 'Syncing…' : 'Sync Outlook'}
-          </button>
         </div>
       </div>
 
       <div className="mb-[18px] grid grid-cols-6 gap-3">
-        {KPIS.map((k) => (
+        {kpis.map((k) => (
           <KpiCard key={k.label} icon={k.icon} value={k.value} label={k.label} trend={k.trend} accent={k.accent} onClick={() => navigate(k.to)} />
         ))}
       </div>
@@ -185,7 +335,7 @@ export default function DashboardPage() {
       <div className="mb-[18px] rounded-xl border border-border bg-surface p-[20px_22px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
         <div className="mb-5 flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-[.06em] text-muted-foreground">Document Pipeline</div>
-          <div className="text-[12.5px] text-faint">Today · 1,284 ingested</div>
+          <div className="text-[12.5px] text-faint">{pipelineLabel} · {(pipelineData[0]?.count ?? 0).toLocaleString('en-US')} ingested</div>
         </div>
         <div className="flex items-start">
           {pipelineSteps.map((s) => (
@@ -225,7 +375,7 @@ export default function DashboardPage() {
                   animation: pipe && s.isLast ? 'pcbPulse 2.4s ease-in-out infinite 1s' : 'none',
                 }}
               >
-                <Check size={17} color="#fff" />
+                <s.icon size={17} color="#fff" />
               </div>
               <div className="mt-2.5 text-[22px] font-extrabold leading-none tracking-[-.02em] tabular-nums">{s.n}</div>
               <div className="mt-[3px] text-[12.5px] font-medium text-muted-foreground">{s.name}</div>
@@ -238,28 +388,28 @@ export default function DashboardPage() {
         <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <div className="flex items-center justify-between border-b border-border2 px-[18px] py-[15px]">
             <div className="flex items-center gap-[9px]">
-              <span className="text-[14.5px] font-bold">SLA at Risk</span>
+              <span className="text-[14.5px] font-bold">Aging Documents</span>
               <span
                 className="rounded-full border px-2 py-0.5 text-[11.5px] font-bold"
                 style={{ color: RED, background: 'var(--redsoft)', borderColor: '#f3d0d0' }}
               >
-                4 due &lt;3h
+                {agingFlaggedCount} over 24h
               </span>
             </div>
-            <a href="#" className="text-[12.5px] font-semibold">View all</a>
+            <a href="/worklist" className="text-[12.5px] font-semibold">View all</a>
           </div>
           <div>
-            {sla.map((r) => {
+            {agingRows.map((r, i) => {
               const hi = r.risk === 'high';
               return (
-                <div key={r.inv} className="pcb-row flex cursor-pointer items-center gap-3 border-b border-borderf px-[18px] py-3">
+                <div key={r.inv ?? i} className="pcb-row flex cursor-pointer items-center gap-3 border-b border-borderf px-[18px] py-3">
                   <span className="h-[9px] w-[9px] flex-none rounded-full" style={{ background: hi ? RED : 'var(--faint)' }} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[13.5px] font-semibold">{r.vendor}</div>
                     <div className="text-xs tabular-nums text-faint">{r.inv} · {r.stage}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[13px] font-bold tabular-nums" style={{ color: hi ? RED : 'var(--text3)' }}>{r.due}</div>
+                    <div className="text-[13px] font-bold tabular-nums" style={{ color: hi ? RED : 'var(--text3)' }}>{r.age}</div>
                     <div className="text-xs tabular-nums text-muted-foreground">{r.amount}</div>
                   </div>
                 </div>
@@ -268,18 +418,21 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)]">
+        <div
+          onClick={() => navigate('/exceptions')}
+          className="cursor-pointer overflow-hidden rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)]"
+        >
           <div className="flex items-center justify-between border-b border-border2 px-[18px] py-[15px]">
             <span className="text-[14.5px] font-bold">Exceptions by Severity</span>
-            <a href="#" className="text-[12.5px] font-semibold">Triage</a>
+            <span className="text-[12.5px] font-semibold text-navy">Triage</span>
           </div>
           <div className="p-1.5 px-2">
-            {severity.map((s) => (
-              <div key={s.label} className="pcb-row flex items-center gap-3 rounded-lg px-3 py-[11px]">
+            {severityCounts.map((s) => (
+              <div key={s.sev} className="pcb-row flex cursor-pointer items-center gap-3 rounded-lg px-3 py-[11px]">
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: sevColor(s.sev) }} />
                 <span className="flex-1 text-[13.5px] font-semibold text-text2">{s.label}</span>
                 <div className="h-[7px] w-[120px] overflow-hidden rounded-md bg-border2">
-                  <div className="h-full rounded-md" style={{ width: `${s.pct}%`, background: sevColor(s.sev) }} />
+                  <div className="h-full rounded-md" style={{ width: `${(s.n / maxSeverityCount) * 100}%`, background: sevColor(s.sev) }} />
                 </div>
                 <span className="w-[30px] text-right text-sm font-extrabold tabular-nums">{s.n}</span>
               </div>
@@ -296,31 +449,61 @@ export default function DashboardPage() {
           <div className="mb-1 flex items-center gap-2">
             <span className="text-[13.5px] font-bold text-navy">AI Insight</span>
             <span className="rounded-full border border-border bg-surface px-[7px] py-px text-[10.5px] font-bold uppercase tracking-[.05em] text-muted-foreground">
-              Pattern detected
+              {insightLoading ? 'Thinking…' : topCriticalException ? 'Needs attention' : 'All clear'}
             </span>
           </div>
           <p className="text-[13.5px] leading-[1.55] text-text2">
-            Match rate for <strong>Nimbus Logistics</strong> dropped 6 pts this week — 3 of 9 critical exceptions
-            trace to their new tax-line format. A GL-mapping rule would auto-resolve an estimated{' '}
-            <strong>~28 invoices/week</strong>.
+            {insightLoading ? 'Thinking…' : insightResponse}
           </p>
-        </div>
-        <div className="flex flex-none items-center gap-2 self-center">
-          <button type="button" className="pcb-btn h-[34px] rounded-lg border border-border bg-surface px-[13px] text-[12.5px] font-semibold text-navy">
-            Dismiss
-          </button>
-          <button type="button" className="pcb-btn h-[34px] rounded-lg border-none bg-navy px-3.5 text-[12.5px] font-semibold text-white">
-            Create rule
-          </button>
+          <form
+            className="mt-3 flex items-center gap-2"
+            onSubmit={(e) => { e.preventDefault(); askInsight(insightPrompt); }}
+          >
+            <input
+              type="text"
+              value={insightPrompt}
+              onChange={(e) => setInsightPrompt(e.target.value)}
+              placeholder="Ask AI Insight… e.g. “Summarize today's ingestion”"
+              className="h-9 flex-1 rounded-lg border border-line bg-surface px-3 text-[13px] text-foreground"
+            />
+            <button
+              type="submit"
+              disabled={!insightPrompt.trim() || insightLoading}
+              title="Ask"
+              className="pcb-btn flex h-9 w-9 flex-none items-center justify-center rounded-lg border-none bg-navy text-white disabled:opacity-40"
+            >
+              {insightLoading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            </button>
+          </form>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {SUGGESTED_PROMPTS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => askInsight(p)}
+                disabled={insightLoading}
+                className="pcb-btn rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-text2 disabled:opacity-40"
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-3.5">
-        {kpiStrip.map((k) => (
+        {kpiStrip.map((k) => {
+          const isDown = k.trend.startsWith('-') || k.trend.startsWith('−');
+          const TrendIcon = isDown ? ArrowDown : ArrowUp;
+          const trendText = k.trend.replace(/^[+\-−]/, '');
+          return (
           <div key={k.label} className="rounded-xl border border-border bg-surface p-[15px_17px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
             <div className="flex items-center justify-between">
               <span className="text-[12.5px] font-medium text-muted-foreground">{k.label}</span>
-              <span className="text-xs font-semibold" style={{ color: k.good ? GREEN : 'var(--muted)' }}>{k.trend}</span>
+              <span className="flex items-center gap-[2px] text-xs font-semibold" style={{ color: k.good ? GREEN : 'var(--muted)' }}>
+                <TrendIcon size={11} strokeWidth={2.75} />
+                {trendText}
+              </span>
             </div>
             <div
               className="mt-[9px] text-[26px] font-extrabold leading-none tracking-[-.03em] tabular-nums"
@@ -332,15 +515,9 @@ export default function DashboardPage() {
               <div className="h-full rounded" style={{ width: `${k.pct}%`, background: k.good ? GREEN : 'var(--navy)' }} />
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
-
-      {toast && (
-        <div className="pcb-view fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-[9px] rounded-[10px] bg-[#111a33] px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_8px_30px_rgba(0,0,0,.28)]">
-          <Check size={17} color="#5eead4" />
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

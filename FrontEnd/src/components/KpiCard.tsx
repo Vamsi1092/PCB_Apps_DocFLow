@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RED, GREEN } from '@/lib/theme';
 
@@ -31,6 +31,9 @@ const ACCENTS: Record<KpiAccent, {
  * attention, 'green' = performing well. */
 export function KpiCard({ icon: Icon, value, label, trend, accent = 'default', onClick }: KpiCardProps) {
   const a = ACCENTS[accent];
+  const isDown = trend.startsWith('-') || trend.startsWith('−');
+  const TrendIcon = isDown ? ArrowDown : ArrowUp;
+  const trendText = trend.replace(/^[+\-−]/, '');
   return (
     <div
       className={cn(
@@ -47,7 +50,10 @@ export function KpiCard({ icon: Icon, value, label, trend, accent = 'default', o
         >
           <Icon size={18} />
         </div>
-        <span className={cn('text-[11.5px]', a.trendWeight)} style={{ color: a.trend }}>{trend}</span>
+        <span className={cn('flex items-center gap-[2px] text-[11.5px]', a.trendWeight)} style={{ color: a.trend }}>
+          <TrendIcon size={11} strokeWidth={2.75} />
+          {trendText}
+        </span>
       </div>
       <div
         className="text-[27px] font-extrabold leading-none tracking-[-.03em] tabular-nums"
