@@ -1,0 +1,2 @@
+# Optional dependency for legacy/ai_service_groq_backup.py only.
+groq==1.5.0

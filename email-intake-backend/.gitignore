@@ -1,0 +1,33 @@
+# Secrets and local cloud credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.oci/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Packaging and editors
+build/
+dist/
+*.egg-info/
+.idea/
+.vscode/
+
+# Local runtime attachments
+downloads/*
+!downloads/.gitkeep
+output/
