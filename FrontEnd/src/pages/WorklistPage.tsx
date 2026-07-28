@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
@@ -178,26 +178,9 @@ export default function WorklistPage() {
   const LIFECYCLE_POPUP_W = 296;
   const LIFECYCLE_POPUP_H = 300;
 
-  // Accepts either the mouse event from DataTable's row hover (positions the
-  // popup at the actual cursor location) or a plain element from the ID link's
-  // keyboard focus (no cursor position available, so it anchors to the element
-  // instead).
-  const openLifecycle = (row: WorklistRow, source: HTMLElement | ReactMouseEvent<HTMLTableRowElement>) => {
-    // The row's mouseenter fires once on first entering the row, even when
-    // the entry point is inside the Priority cell (a <td> auto-sizes to its
-    // content, so the trigger button inside it can't reliably be made to
-    // fill the whole cell via CSS) — bail out entirely so hovering anywhere
-    // in that column, not just the badge pixels, never opens the Lifecycle
-    // popup at all. openPriorityHover (fired separately, directly on that
-    // button) handles showing the Priority Reason tooltip on its own.
-    // Same rationale for the Assigned To cell: its picker opens a dropdown, so
-    // hovering that column must never trigger the Lifecycle popup on top of it.
-    if ('clientX' in source) {
-      const td = (source.target as HTMLElement).closest('td');
-      if (td?.querySelector('[data-priority-trigger]') || td?.querySelector('[data-assignee-trigger]')) {
-        return;
-      }
-    }
+  // Triggered only from the Doc Ref cell (mouse hover or keyboard focus) —
+  // anchors the popup to that cell's position.
+  const openLifecycle = (row: WorklistRow, source: HTMLElement) => {
     // A picker menu is open somewhere — don't surface the row-hover popup over it.
     if (assigningRef.current) return;
     clearTimeout(lifecycleHideTimer.current);
@@ -205,16 +188,9 @@ export default function WorklistPage() {
     clearTimeout(hideTimer.current);
     setHover(null);
     if (lifecycleAnchor?.documentId !== row.id) {
-      let left: number;
-      let top: number;
-      if ('clientX' in source) {
-        left = Math.max(16, Math.min(source.clientX + 16, window.innerWidth - LIFECYCLE_POPUP_W - 16));
-        top = Math.max(16, Math.min(source.clientY + 12, window.innerHeight - LIFECYCLE_POPUP_H - 16));
-      } else {
-        const rect = source.getBoundingClientRect();
-        left = Math.max(16, Math.min(rect.left + 48, window.innerWidth - LIFECYCLE_POPUP_W - 16));
-        top = Math.max(16, Math.min(rect.top, window.innerHeight - LIFECYCLE_POPUP_H - 16));
-      }
+      const rect = source.getBoundingClientRect();
+      const left = Math.max(16, Math.min(rect.left + 48, window.innerWidth - LIFECYCLE_POPUP_W - 16));
+      const top = Math.max(16, Math.min(rect.top, window.innerHeight - LIFECYCLE_POPUP_H - 16));
       setLifecycleAnchor({ documentId: row.id, top, left });
     }
     const chainId = row.document_chain_id;
@@ -329,18 +305,32 @@ export default function WorklistPage() {
           to={`/worklist/${r.id}`}
           state={{ row: r }}
           className="text-[13px] font-semibold tabular-nums text-navy underline-offset-2 hover:underline"
-          // Keyboard equivalent of the row-hover Lifecycle popup: tabbing onto the
-          // ID link opens it, same as hovering the row with a mouse.
-          onFocus={(e) => openLifecycle(r, e.currentTarget)}
-          onBlur={scheduleLifecycleHide}
-          onKeyDown={(e) => { if (e.key === 'Escape') setLifecycleAnchor(null); }}
         >
           {r.display_id}
         </Link>
       ),
     },
     { key: 'supplier', label: 'Supplier', sortable: true, cell: (r) => <span className="text-[13.5px]">{r.supplier}</span> },
-    { key: 'doc_ref', label: 'Doc Ref', sortable: true, cell: (r) => <span className="text-[13px] tabular-nums">{r.doc_ref}</span> },
+    {
+      key: 'doc_ref',
+      label: 'Doc Ref',
+      sortable: true,
+      // The Document Lifecycle popup opens only from this column — hovering or
+      // focusing anywhere else in the row must not trigger it.
+      cell: (r) => (
+        <span
+          tabIndex={0}
+          className="inline-block cursor-help text-[13px] tabular-nums"
+          onMouseEnter={(e) => openLifecycle(r, e.currentTarget)}
+          onFocus={(e) => openLifecycle(r, e.currentTarget)}
+          onMouseLeave={scheduleLifecycleHide}
+          onBlur={scheduleLifecycleHide}
+          onKeyDown={(e) => { if (e.key === 'Escape') setLifecycleAnchor(null); }}
+        >
+          {r.doc_ref}
+        </span>
+      ),
+    },
     { key: 'po_number', label: 'PO Number', sortable: true, cell: (r) => <span className="text-[13px] tabular-nums text-muted-foreground">{r.po_number}</span> },
     { key: 'document_type', label: 'Document Type', sortable: true, cell: (r) => <span className="whitespace-nowrap text-[13px] text-text2">{titleCaseDocType(r.document_type)}</span> },
     { key: 'amount', label: 'Amount', align: 'right', sortable: true, cell: (r) => <span className="text-[13.5px] font-semibold tabular-nums">{fmtMoney(r.amount)}</span> },
@@ -351,17 +341,11 @@ export default function WorklistPage() {
       sortable: true,
       cell: (r) => (
         // Shrink-wrapped to its own content so the tooltip's anchor rect
-        // matches what's actually visible on screen. `data-priority-trigger`
-        // marks this cell for openLifecycle's bounding check (see there) —
-        // hovering anywhere in this TD, including the padding around the
-        // badge (a table cell can't be reliably made to fill via CSS alone;
-        // it auto-sizes to content), must suppress the Document Lifecycle
-        // popup, never just the exact badge pixels.
+        // matches what's actually visible on screen.
         // Keyboard-operable: a real button, so it's tabbable, and onFocus/onBlur
         // mirror the mouse handlers so keyboard users get the same tooltip.
         <button
           type="button"
-          data-priority-trigger="true"
           className="inline-block cursor-help border-none bg-transparent p-0"
           onMouseEnter={(e) => openPriorityHover(r.id, e.currentTarget)}
           onFocus={(e) => openPriorityHover(r.id, e.currentTarget)}
@@ -524,8 +508,6 @@ export default function WorklistPage() {
             sort={{ col: sortCol, dir: sortDir }}
             onSort={onSort}
             minWidth={1650}
-            onRowMouseEnter={openLifecycle}
-            onRowMouseLeave={scheduleLifecycleHide}
           />
           <div className="mt-3 flex items-center justify-between text-[12.5px] text-muted-foreground">
             <span>
