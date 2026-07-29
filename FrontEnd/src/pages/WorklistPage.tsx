@@ -159,8 +159,9 @@ export default function WorklistPage() {
   };
 
   // Document Lifecycle popup: opened on row hover, anchored to the row's top-left.
-  const [lifecycleAnchor, setLifecycleAnchor] = useState<{ documentId: string; top: number; left: number } | null>(null);
+  const [lifecycleAnchor, setLifecycleAnchor] = useState<{ documentId: string; anchorTop: number; top: number; left: number } | null>(null);
   const lifecycleHideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const lifecyclePopupRef = useRef<HTMLDivElement>(null);
   // Real document_lifecycle_view rows, fetched on first hover and cached per
   // chain so re-hovering the same (or a sibling) document in that chain doesn't
   // re-fetch. Keyed by document_chain_id, not document_id.
@@ -190,8 +191,11 @@ export default function WorklistPage() {
     if (lifecycleAnchor?.documentId !== row.id) {
       const rect = source.getBoundingClientRect();
       const left = Math.max(16, Math.min(rect.left + 48, window.innerWidth - LIFECYCLE_POPUP_W - 16));
+      // Estimate-based clamp for the very first paint only (avoids popping in from
+      // nowhere before anything real is measured). Corrected below once the
+      // popup's actual height is known — see the ResizeObserver effect.
       const top = Math.max(16, Math.min(rect.top, window.innerHeight - LIFECYCLE_POPUP_H - 16));
-      setLifecycleAnchor({ documentId: row.id, top, left });
+      setLifecycleAnchor({ documentId: row.id, anchorTop: rect.top, top, left });
     }
     const chainId = row.document_chain_id;
     if (chainId && !(chainId in lifecycleCache) && !lifecycleLoadFailed[chainId]) {
@@ -200,6 +204,29 @@ export default function WorklistPage() {
         .catch(() => setLifecycleLoadFailed((prev) => ({ ...prev, [chainId]: true })));
     }
   };
+
+  // Once the popup mounts (and again whenever its real height changes — e.g.
+  // `stages` finish loading, or the user clicks a stage row to expand/collapse
+  // it, state internal to DocumentLifecyclePopup and otherwise invisible here),
+  // re-clamp against the *measured* height instead of the LIFECYCLE_POPUP_H
+  // estimate. Re-subscribes when a new document's popup opens; disconnects on
+  // close or when switching rows.
+  useEffect(() => {
+    const el = lifecyclePopupRef.current;
+    if (!el || !lifecycleAnchor) return;
+
+    const ro = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (height == null) return;
+      setLifecycleAnchor((prev) => {
+        if (!prev) return prev;
+        const nextTop = Math.max(16, Math.min(prev.anchorTop, window.innerHeight - height - 16));
+        return nextTop === prev.top ? prev : { ...prev, top: nextTop };
+      });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [lifecycleAnchor?.documentId]);
 
   // Debounce the search box so filtering doesn't recompute on every keystroke.
   useEffect(() => {
@@ -562,7 +589,7 @@ export default function WorklistPage() {
         const stages = chainId ? (lifecycleCache[chainId] ?? null) : [];
         const failed = chainId ? !!lifecycleLoadFailed[chainId] : false;
         return createPortal(
-          <div className="fixed z-[210]" style={{ top: lifecycleAnchor.top, left: lifecycleAnchor.left }}>
+          <div ref={lifecyclePopupRef} className="fixed z-[210]" style={{ top: lifecycleAnchor.top, left: lifecycleAnchor.left }}>
             <DocumentLifecyclePopup
               transactionKey={lcRow.po_number !== '—' ? lcRow.po_number : null}
               supplier={lcRow.supplier}
