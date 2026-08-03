@@ -40,12 +40,21 @@ const NUMERIC_KEYS = new Set<SortableKey>(['amount', 'confidence', 'exceptions',
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
 
-const TOOLTIP_WIDTH = 400;
+const TOOLTIP_PANEL_WIDTH = 300; // matches the panel's own max-w-[300px]
 const TOOLTIP_MARGIN = 12;
+// Caps how tall the Priority Reason tooltip can render (paired with
+// max-h/overflow-y-auto below) and — combined with TOOLTIP_PANEL_WIDTH —
+// decides whether it flips above the badge instead of its default spot
+// directly below, so it never overflows the viewport.
+const TOOLTIP_MAX_HEIGHT = 260;
 const TOOLTIP_HIDE_DELAY = 150;
 
+// Anchored directly below (default) or above (flip) the Priority badge —
+// always vertically adjacent to it, never off to the side, so the popup
+// reads as clearly attached to whatever triggered it regardless of which
+// column the badge sits in.
 type HoverState =
-  | { key: string; placement: 'right'; top: number; left: number }
+  | { key: string; placement: 'below'; top: number; left: number }
   | { key: string; placement: 'above'; bottom: number; left: number };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -149,12 +158,12 @@ export default function WorklistPage() {
     clearTimeout(lifecycleHideTimer.current);
     setLifecycleAnchor(null);
     const rect = el.getBoundingClientRect();
-    const spaceRight = window.innerWidth - rect.right;
-    if (spaceRight >= TOOLTIP_WIDTH + TOOLTIP_MARGIN) {
-      setHover({ key: id, placement: 'right', top: rect.top, left: rect.right + 10 });
+    const left = Math.max(TOOLTIP_MARGIN, Math.min(rect.left, window.innerWidth - TOOLTIP_PANEL_WIDTH - TOOLTIP_MARGIN));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow >= TOOLTIP_MAX_HEIGHT + TOOLTIP_MARGIN) {
+      setHover({ key: id, placement: 'below', top: rect.bottom + 8, left });
     } else {
-      const left = Math.max(TOOLTIP_MARGIN, Math.min(rect.left, window.innerWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN));
-      setHover({ key: id, placement: 'above', bottom: window.innerHeight - rect.top + 10, left });
+      setHover({ key: id, placement: 'above', bottom: window.innerHeight - rect.top + 8, left });
     }
   };
 
@@ -426,7 +435,7 @@ export default function WorklistPage() {
     <div className="pcb-view">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Worklist</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Worklist</h1>
           <p className="text-[13.5px] text-muted-foreground">
             All open documents · <span className="tabular-nums">{totalCount}</span> in queue
           </p>
@@ -568,16 +577,17 @@ export default function WorklistPage() {
         // for `position: fixed` descendants — which would otherwise pin this tooltip far below
         // the viewport instead of next to the hovered badge. Same fix as the AP Inbox tooltip.
         <div
-          className="pcb-view fixed z-[200] min-w-[220px] max-w-[300px] rounded-xl bg-[#111a33] p-[10px_12px] text-white shadow-[0_12px_36px_rgba(0,0,0,.32)]"
-          style={
-            hover!.placement === 'right'
+          className="pcb-view fixed z-[200] min-w-[220px] max-w-[300px] overflow-y-auto rounded-xl bg-[#111a33] p-[10px_12px] text-white shadow-[0_12px_36px_rgba(0,0,0,.32)]"
+          style={{
+            maxHeight: TOOLTIP_MAX_HEIGHT,
+            ...(hover!.placement === 'below'
               ? { top: hover!.top, left: hover!.left }
-              : { bottom: hover!.bottom, left: hover!.left }
-          }
+              : { bottom: hover!.bottom, left: hover!.left }),
+          }}
           onMouseEnter={cancelHide}
           onMouseLeave={scheduleHide}
         >
-          <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[.06em] text-[#8ca0d6]">Priority Reason</div>
+          <div className="mb-1.5 text-[10.5px] font-medium text-[#8ca0d6]">Priority Reason</div>
           <p className="whitespace-normal break-words text-[12px] leading-[1.45] text-[#c3cce3]">{hoveredRow.priority_reason}</p>
         </div>,
         document.body,

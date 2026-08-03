@@ -159,7 +159,7 @@ function Modal({
       >
         <div className="flex items-start justify-between border-b border-borderf px-5 py-3.5">
           <div>
-            <div className="text-[14.5px] font-bold">{title}</div>
+            <div className="text-[14.5px] font-semibold tracking-tight">{title}</div>
             {subtitle && <div className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</div>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="pcb-btn rounded-lg p-1 text-muted-foreground">
@@ -341,13 +341,8 @@ export default function SettingsPage() {
   return (
     <div className="pcb-view">
       <div className="mb-4">
-        <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Settings</h1>
+        <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Settings</h1>
         <p className="text-[13.5px] text-muted-foreground">Workspace · Acme Corp AP</p>
-        <p className="mt-1 max-w-[640px] text-[12px] leading-relaxed text-faint">
-          Local demo configuration — saved to this browser only. Team, approval, GL, SLA,
-          integration, and notification settings will need a real persistence/auth backend
-          before they can be shared across users or devices.
-        </p>
       </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5">
         {cards.map((s) => (
@@ -355,7 +350,7 @@ export default function SettingsPage() {
             key={s.key}
             className="pcb-lift rounded-xl border border-border bg-surface p-[18px] shadow-[0_1px_2px_rgba(16,24,40,.04)]"
           >
-            <div className="mb-[5px] text-[14.5px] font-bold">{s.title}</div>
+            <div className="mb-[5px] text-[14.5px] font-semibold tracking-tight">{s.title}</div>
             <div className="mb-[14px] text-[12.5px] leading-[1.5] text-muted-foreground">{s.desc}</div>
             <button
               type="button"
@@ -498,7 +493,7 @@ export default function SettingsPage() {
             )}
           </div>
           <div className="mt-3 rounded-lg border border-dashed border-line p-2.5">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-[.04em] text-faint">Add mapping</div>
+            <div className="mb-2 text-[11px] font-medium text-faint">Add mapping</div>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -728,7 +723,7 @@ export default function SettingsPage() {
           <div className="grid gap-2" style={{ gridTemplateColumns: '1fr repeat(3,64px)' }}>
             <div />
             {NOTIFY_CHANNELS.map((c) => (
-              <div key={c.key} className="text-center text-[11px] font-bold uppercase tracking-[.04em] text-faint">{c.label}</div>
+              <div key={c.key} className="text-center text-[11px] font-medium text-faint">{c.label}</div>
             ))}
             {NOTIFY_EVENTS.map((ev) => (
               <Fragment key={ev.key}>

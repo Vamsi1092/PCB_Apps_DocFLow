@@ -57,7 +57,7 @@ export function DataTable<T>({ columns, rows, sort, onSort, minWidth = 840, onRo
                     key={c.key}
                     aria-sort={ariaSort}
                     className={cn(
-                      'h-auto whitespace-nowrap px-4 py-3 text-[11.5px] font-bold uppercase tracking-[.05em] text-muted-foreground',
+                      'h-auto whitespace-nowrap px-4 py-3 text-[11.5px] font-medium text-muted-foreground',
                       c.align === 'right' ? 'text-right' : 'text-left',
                       c.hideBelow && HIDE_BELOW_CLASS[c.hideBelow],
                     )}

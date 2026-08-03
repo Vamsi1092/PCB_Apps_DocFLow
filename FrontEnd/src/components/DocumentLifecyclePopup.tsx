@@ -217,7 +217,7 @@ export function DocumentLifecyclePopup({
   const header = (
     <>
       <div className="mb-0.5 flex items-baseline justify-between gap-2">
-        <span className="text-[9px] font-bold uppercase tracking-[.07em]" style={{ color: '#a5b4fc' }}>Document Lifecycle</span>
+        <span className="text-[9px] font-medium" style={{ color: '#a5b4fc' }}>Document Lifecycle</span>
         {supplier && <span className="truncate text-[10.5px]" style={{ color: 'rgba(226,232,255,.45)' }}>{supplier}</span>}
       </div>
       <div className="mb-2 truncate text-[14.5px] font-bold" style={{ color: TEXT_BRIGHT }}>{transactionKey ?? 'No PO linked'}</div>

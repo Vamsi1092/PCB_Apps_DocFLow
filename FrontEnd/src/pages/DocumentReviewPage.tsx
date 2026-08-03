@@ -428,7 +428,7 @@ export default function DocumentReviewPage() {
             <ArrowLeft size={16} />
           </Link>
           <div>
-            <h1 className="text-[20px] font-bold uppercase tracking-[-.02em]">{row.display_id}</h1>
+            <h1 className="text-[20px] font-semibold tracking-tight">{row.display_id}</h1>
             <p className="text-[12.5px] text-muted-foreground">
               {row.supplier} · {titleCaseDocType(row.document_type)} · {fmtMoney(row.amount, row.currency)}
             </p>
@@ -449,7 +449,7 @@ export default function DocumentReviewPage() {
         <div className="flex w-full flex-col gap-3.5 lg:w-[340px] lg:shrink-0">
           {/* Match summary — how invoice lines up against PO/GRN. */}
           <div className="rounded-xl border border-border bg-surface p-4">
-            <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">Match Status</div>
+            <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">Match Status</div>
             <div className="mb-3 flex items-center gap-2">
               {demo ? (
                 // Demo scenario (VAMSI_7_SCENARIO_UI_DEMO_GUIDE §8 color mapping):
@@ -511,7 +511,7 @@ export default function DocumentReviewPage() {
           {/* Exception detail — count + the AI's exception assessment. */}
           <div className="rounded-xl border border-border bg-surface p-4">
             <div className="mb-2.5 flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">Exception Summary</span>
+              <span className="text-[11px] font-medium text-muted-foreground">Exception Summary</span>
               <span className="text-[12.5px] font-bold tabular-nums" style={{ color: row.exceptions > 0 ? RED : 'var(--text3)' }}>
                 {row.exceptions} open
               </span>
@@ -558,13 +558,13 @@ export default function DocumentReviewPage() {
           <div className="rounded-xl border border-border bg-surface p-4">
             {demo ? (
               <>
-                <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">AI Match Explanation</div>
+                <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">AI Match Explanation</div>
                 <div className="text-[12.5px] leading-relaxed text-text2">{demo.ai_match_reason}</div>
               </>
             ) : (
               <>
                 <div className="mb-2.5 flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">AI Priority</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">AI Priority</span>
                   <SeverityBadge severity={priority} />
                 </div>
                 <div className="text-[12.5px] leading-relaxed text-text2">
@@ -576,7 +576,7 @@ export default function DocumentReviewPage() {
 
           {/* Recommended action — the AI's suggested next step. */}
           <div className="rounded-xl border border-border bg-surface p-4">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">Recommended Action</div>
+            <div className="mb-2 text-[11px] font-medium text-muted-foreground">Recommended Action</div>
             <div className="text-[12.5px] leading-relaxed text-text2">
               {demo ? (
                 // VAMSI_7_SCENARIO_UI_DEMO_GUIDE §5: use the match-specific
@@ -601,7 +601,7 @@ export default function DocumentReviewPage() {
               UI state only: never saved anywhere, cleared on navigation away. */}
           <div className="rounded-xl border border-border bg-surface p-4">
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="review-comment" className="block text-[11px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+              <label htmlFor="review-comment" className="block text-[11px] font-medium text-muted-foreground">
                 Reviewer Note
               </label>
               {comment && (

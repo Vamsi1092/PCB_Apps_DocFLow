@@ -5,7 +5,7 @@ import { RED, GREEN } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/Toast';
-import { fetchDocumentUiRows, UNRESOLVED_SUPPLIER, type DocumentUiRow } from '@/lib/documentRow';
+import { fetchDocumentUiRows, docTypeCode, UNRESOLVED_SUPPLIER, type DocumentUiRow } from '@/lib/documentRow';
 
 type Verdict = 'approved' | 'rejected';
 const PAGE_SIZE = 12;
@@ -210,7 +210,7 @@ export default function ApprovalsPage() {
     <div className="pcb-view">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Approvals</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Approvals</h1>
           <p className="text-[13.5px] text-muted-foreground">Awaiting your sign-off · {totalCount} pending</p>
         </div>
         {hasDecisions && (
@@ -260,20 +260,20 @@ export default function ApprovalsPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[15px] font-bold">{a.vendor}</span>
                     </div>
-                    <div className="mt-0.5 text-xs tabular-nums text-faint">{a.invoice_number ?? '—'} · {fmtRelative(a.created_at)}</div>
+                    <div className="mt-0.5 text-xs tabular-nums text-faint">Doc ref - {a.invoice_number ?? '—'} · {fmtRelative(a.created_at)}</div>
                   </div>
                   <div className="text-[19px] font-extrabold tracking-[-.02em] tabular-nums">{fmtMoney(a.amount, a.currency)}</div>
                 </div>
                 <div className="mb-3.5 flex flex-wrap gap-2">
                   <MatchBadge m={a.matched_against} />
                   <span className="rounded-full border border-line bg-surface px-2.5 py-[3px] text-[11.5px] font-semibold text-text3">
-                    {a.po_number ?? '—'}
+                    {a.document_type ? docTypeCode(a.document_type) : 'PO'} - {a.po_number ?? '—'}
                   </span>
                 </div>
                 {/* Reviewer's note captured when the document was sent to approvals. */}
                 {a.review_comment && (
                   <div className="mb-3.5 rounded-lg border border-borderf bg-surface2 px-3 py-2">
-                    <div className="mb-0.5 text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">Reviewer note</div>
+                    <div className="mb-0.5 text-[10.5px] font-medium text-muted-foreground">Reviewer note</div>
                     <div className="text-[12.5px] leading-relaxed text-text2">{a.review_comment}</div>
                   </div>
                 )}
@@ -301,7 +301,7 @@ export default function ApprovalsPage() {
                       className="pcb-btn flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-semibold"
                       style={{ borderColor: '#f3d0d0', background: 'var(--surface)', color: RED }}
                     >
-                      <X size={15} />Return to Worklist
+                      <X size={15} />Return
                     </button>
                     <button
                       type="button"

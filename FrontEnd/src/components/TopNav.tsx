@@ -1,47 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import {
-  AlertTriangle, Bell, Check, LogOut, Moon, Search, Settings2, Sun, User, Zap, type LucideIcon,
-} from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Menu, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GREEN, RED } from '@/lib/theme';
-import { activity, type ActivityKind } from '@/data';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { RED } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { AP_DOCUMENT_SELECT, fetchDocumentUiRows, titleCaseDocType, toWorklistRow, UNRESOLVED_SUPPLIER, type ApDocRow, type DocumentUiRow } from '@/lib/documentRow';
 import type { WorklistRow } from '@/data';
-import { useToast } from '@/hooks/useToast';
-import { Toast } from '@/components/Toast';
 import logo from '@/assets/PCB_Logo.png';
 
-export const TABS: [string, string][] = [
-  ['/', 'Dashboard'],
-  ['/inbox', 'AP Inbox'],
-  ['/worklist', 'Worklist'],
-  ['/approvals', 'Approvals'],
-  ['/reporting', 'Reporting'],
-  ['/activity', 'Activity'],
-  ['/autonomy', 'Autonomy'],
-  ['/settings', 'Settings'],
-];
-
-const KIND_ICON: Record<ActivityKind, LucideIcon> = {
-  bolt: Zap,
-  check: Check,
-  alert: AlertTriangle,
-  user: User,
-  gear: Settings2,
-};
-
-const KIND_COLOR: Record<ActivityKind, string> = {
-  bolt: 'var(--navy)',
-  check: GREEN,
-  alert: RED,
-  user: 'var(--muted)',
-  gear: 'var(--muted)',
-};
-
-const NOTIF_LIMIT = 6;
 const SEARCH_RESULT_LIMIT = 8;
 
 interface SearchHit {
@@ -52,8 +19,6 @@ interface SearchHit {
   to: string;
   state?: unknown;
 }
-
-type MenuKey = 'search' | 'alerts' | 'profile';
 
 // Minimal row shapes for the search sources that aren't already the full Worklist
 // mapping — only what's needed to build a SearchHit. Each mirrors the same
@@ -78,20 +43,27 @@ function canonicalSupplier(ui: DocumentUiRow | undefined): string {
 }
 
 interface TopNavProps {
+  sidebarExpanded: boolean;
+  onToggleSidebar: () => void;
   dark: boolean;
   onToggleDark: () => void;
+  unreadCount: number;
+  onMarkNotificationsRead: () => void;
 }
 
-/** Fixed navy bar: logo, horizontal tabs, theme toggle + utility icons, avatar. */
-export function TopNav({ dark, onToggleDark }: TopNavProps) {
+/**
+ * Fixed navy bar: hamburger + logo on the left, search + notifications +
+ * theme toggle on the right (in that order). Profile/sign-out stays in
+ * Sidebar.tsx's footer — the Notifications row there shares the same
+ * unread state as the bell button here (both live in App.tsx).
+ */
+export function TopNav({ sidebarExpanded, onToggleSidebar, dark, onToggleDark, unreadCount, onMarkNotificationsRead }: TopNavProps) {
   const navigate = useNavigate();
-  const utilBtn = 'flex h-[34px] w-[34px] items-center justify-center rounded-lg border-none bg-white/[.08] text-[#dbe3f4]';
-
   const containerRef = useRef<HTMLDivElement>(null);
-  const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  // Search — reads the same Supabase tables the pages themselves read (no more
-  // dead FastAPI calls). Loaded once, lazily, the first time the menu opens.
+  // Search — reads the same Supabase tables the pages themselves read. Loaded
+  // once, lazily, the first time the menu opens.
   const [query, setQuery] = useState('');
   const [searchLoaded, setSearchLoaded] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -106,25 +78,15 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchFocusIndex, setSearchFocusIndex] = useState(-1);
 
-  // Notifications — still the same static demo data (src/data.ts); labeled as
-  // such in the panel rather than presented as a real activity feed.
-  const notifItems = activity.slice(0, NOTIF_LIMIT);
-  const [readIdx, setReadIdx] = useState<Set<number>>(new Set());
-  const unreadCount = notifItems.filter((_, i) => !readIdx.has(i)).length;
-  const [notifFocusIndex, setNotifFocusIndex] = useState(-1);
-
-  // Sign out — local UI action only, never a real session invalidation.
-  const { toast: signOutToast, showToast: showSignOutToast } = useToast(3000);
-
   useEffect(() => {
-    if (!activeMenu) return;
+    if (!searchOpen) return;
     const onMouseDown = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setActiveMenu(null);
+        setSearchOpen(false);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveMenu(null);
+      if (e.key === 'Escape') setSearchOpen(false);
     };
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKeyDown);
@@ -132,10 +94,10 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [activeMenu]);
+  }, [searchOpen]);
 
   useEffect(() => {
-    if (activeMenu !== 'search') return;
+    if (!searchOpen) return;
     searchInputRef.current?.focus();
     if (searchLoaded) return;
     setSearchLoaded(true);
@@ -178,7 +140,7 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
           setSearchLoading(false);
         });
     });
-  }, [activeMenu, searchLoaded]);
+  }, [searchOpen, searchLoaded]);
 
   const searchResults = useMemo<SearchHit[]>(() => {
     const q = query.trim().toLowerCase();
@@ -239,7 +201,7 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
 
   const goToSearchResult = (hit: SearchHit) => {
     navigate(hit.to, hit.state ? { state: hit.state } : undefined);
-    setActiveMenu(null);
+    setSearchOpen(false);
     setQuery('');
   };
 
@@ -257,86 +219,44 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
     }
   };
 
-  const openNotification = (i: number) => {
-    setReadIdx((prev) => new Set(prev).add(i));
-    setActiveMenu(null);
+  const utilBtn = 'flex h-[34px] w-[34px] items-center justify-center rounded-lg border-none bg-white/[.08] text-[#dbe3f4]';
+
+  const openNotifications = () => {
+    onMarkNotificationsRead();
     navigate('/activity');
-  };
-
-  const onNotifKeyDown = (e: React.KeyboardEvent) => {
-    if (!notifItems.length) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setNotifFocusIndex((i) => Math.min(i + 1, notifItems.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setNotifFocusIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter' && notifFocusIndex >= 0) {
-      e.preventDefault();
-      openNotification(notifFocusIndex);
-    }
-  };
-
-  const handleSignOut = () => {
-    setActiveMenu(null);
-    showSignOutToast('Signed out — see you soon (local UI only, no session was ended)');
-  };
-
-  const toggleMenu = (key: MenuKey) => {
-    setActiveMenu((m) => (m === key ? null : key));
-    if (key === 'alerts') setNotifFocusIndex(-1);
   };
 
   return (
     <header className="sticky top-0 z-50 bg-navy text-white shadow-[0_1px_0_rgba(255,255,255,.06),0_2px_10px_rgba(12,22,58,.18)]">
       <div className="flex h-[58px] items-stretch">
-        <div className="flex flex-none items-center bg-surface px-6 shadow-[2px_0_8px_rgba(0,0,0,.12)]">
+        <div className="flex w-[180px] flex-none items-center gap-4 bg-white pl-4 pr-6 shadow-[2px_0_8px_rgba(0,0,0,.12)]">
+          <button
+            type="button"
+            title="Toggle navigation"
+            aria-label={sidebarExpanded ? 'Collapse navigation menu' : 'Expand navigation menu'}
+            aria-expanded={sidebarExpanded}
+            onClick={onToggleSidebar}
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-lg border-none bg-transparent text-navy"
+          >
+            <Menu size={18} />
+          </button>
           <img src={logo} alt="PCB Apps" className="block h-[26px] w-auto" />
         </div>
 
-        <div className="mx-auto flex min-w-0 max-w-[1400px] flex-1 items-center gap-5 px-[22px]">
-          <nav className="flex flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
-            {TABS.map(([to, label]) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'pcb-tab whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] uppercase tracking-[.03em] transition-all',
-                  isActive ? 'bg-white/[.16] font-bold text-white' : 'font-medium text-white/[.68]',
-                )
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div ref={containerRef} className="flex flex-none items-center gap-1.5">
-          <button
-            type="button"
-            title="Toggle theme"
-            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-            onClick={onToggleDark}
-            className={cn('pcb-btn', utilBtn)}
-          >
-            {dark ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-
-          <div className="relative">
+        <div className="flex flex-1 items-center justify-end gap-3 px-[22px]">
+          <div ref={containerRef} className="relative">
             <button
               type="button"
               title="Search"
               aria-label="Search"
               aria-haspopup="true"
-              aria-expanded={activeMenu === 'search'}
-              onClick={() => toggleMenu('search')}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((v) => !v)}
               className={cn('pcb-btn', utilBtn)}
             >
               <Search size={17} />
             </button>
-            {activeMenu === 'search' && (
+            {searchOpen && (
               <div className="pcb-view absolute right-0 top-11 z-30 w-[360px] rounded-[10px] border border-border bg-surface p-[5px] shadow-[0_10px_30px_rgba(16,24,40,.14)]">
                 <div className="flex items-center gap-2 border-b border-border2 px-2 pb-2 pt-1">
                   <Search size={15} className="flex-none text-faint" aria-hidden="true" />
@@ -384,7 +304,7 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
                           <div className="truncate text-[13px] font-semibold text-text2">{r.primary}</div>
                           <div className="truncate text-[11.5px] text-faint">{r.secondary}</div>
                         </div>
-                        <span className="flex-none rounded-full border border-border bg-tint px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.04em] text-navy">
+                        <span className="flex-none rounded-full border border-border bg-tint px-2 py-0.5 text-[10px] font-semibold text-navy">
                           {r.group}
                         </span>
                       </button>
@@ -395,135 +315,22 @@ export function TopNav({ dark, onToggleDark }: TopNavProps) {
             )}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              title="Alerts"
-              aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-              aria-haspopup="true"
-              aria-expanded={activeMenu === 'alerts'}
-              onClick={() => toggleMenu('alerts')}
-              onKeyDown={onNotifKeyDown}
-              className={cn('pcb-btn relative', utilBtn)}
-            >
-              <Bell size={17} aria-hidden="true" />
-              {unreadCount > 0 && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-destructive px-[3px] text-[9px] font-bold text-white shadow-[0_0_0_2px_var(--navy)]"
-                >
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            {activeMenu === 'alerts' && (
-              <div role="menu" aria-label="Notifications" className="pcb-view absolute right-0 top-11 z-30 w-[340px] rounded-[10px] border border-border bg-surface p-[5px] shadow-[0_10px_30px_rgba(16,24,40,.14)]">
-                <div className="flex items-center justify-between px-3 pb-1 pt-1">
-                  <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">Notifications</span>
-                  {unreadCount > 0 && <span className="text-[11px] font-semibold text-navy">{unreadCount} new</span>}
-                </div>
-                <div className="px-3 pb-1.5 text-[10.5px] text-faint">Demo activity feed — local sample data</div>
-                <div className="max-h-[360px] overflow-y-auto">
-                  {notifItems.map((n, i) => {
-                    const Icon = KIND_ICON[n.kind];
-                    const unread = !readIdx.has(i);
-                    return (
-                      <button
-                        key={i}
-                        role="menuitem"
-                        type="button"
-                        onClick={() => openNotification(i)}
-                        onMouseEnter={() => setNotifFocusIndex(i)}
-                        className="pcb-row flex w-full items-start gap-2.5 rounded-[7px] border-none px-[11px] py-2.5 text-left"
-                        style={{ background: unread ? 'var(--tint)' : i === notifFocusIndex ? 'var(--surface2)' : 'transparent' }}
-                      >
-                        <div
-                          className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-[8px]"
-                          style={{ background: KIND_COLOR[n.kind] }}
-                        >
-                          <Icon size={13} color="#fff" aria-hidden="true" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[12.5px] leading-snug text-text2">
-                            <strong>{n.who}</strong> {n.action} <span className="font-semibold tabular-nums text-navy">{n.target}</span>
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-faint">{n.when}</div>
-                        </div>
-                        {unread && <span aria-hidden="true" className="mt-1.5 h-[7px] w-[7px] flex-none rounded-full bg-navy" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setReadIdx(new Set(notifItems.map((_, i) => i)));
-                    setActiveMenu(null);
-                    navigate('/activity');
-                  }}
-                  className="pcb-row mt-1 flex h-9 w-full items-center justify-center rounded-[7px] border-none border-t border-border2 text-[12px] font-semibold text-navy"
-                >
-                  View all activity
-                </button>
-              </div>
+          <button
+            type="button"
+            title="Notifications"
+            aria-label="Notifications"
+            onClick={openNotifications}
+            className={cn('pcb-btn relative', utilBtn)}
+          >
+            <Bell size={17} />
+            {unreadCount > 0 && (
+              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
             )}
-          </div>
+          </button>
 
-          <div className="mx-1 h-6 w-px bg-white/[.16]" />
-
-          <div className="relative">
-            <button
-              type="button"
-              aria-label="Account menu — Maya Reyes, AP Analyst"
-              aria-haspopup="true"
-              aria-expanded={activeMenu === 'profile'}
-              onClick={() => toggleMenu('profile')}
-              className="pcb-btn flex cursor-pointer items-center gap-[9px] rounded-lg border-none bg-transparent px-1 py-1"
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-gradient-to-br from-navy2 to-[#6B84C4] text-[12.5px] font-bold tracking-[.02em] text-white">
-                  MR
-                </AvatarFallback>
-              </Avatar>
-              <div className="text-left leading-[1.15]">
-                <div className="text-[12.5px] font-semibold">Maya Reyes</div>
-                <div className="text-[11px] text-[#9fb0d6]">AP Analyst</div>
-              </div>
-            </button>
-            {activeMenu === 'profile' && (
-              <div role="menu" aria-label="Account menu" className="pcb-view absolute right-0 top-11 z-30 w-[220px] rounded-[10px] border border-border bg-surface p-[5px] shadow-[0_10px_30px_rgba(16,24,40,.14)]">
-                <div className="flex items-center gap-2.5 border-b border-border2 px-2.5 py-2.5">
-                  <Avatar className="h-9 w-9">
-                    <AvatarFallback className="bg-gradient-to-br from-navy2 to-[#6B84C4] text-[12.5px] font-bold tracking-[.02em] text-white">
-                      MR
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="leading-[1.15]">
-                    <div className="text-[13px] font-semibold text-foreground">Maya Reyes</div>
-                    <div className="text-[11px] text-muted-foreground">AP Analyst</div>
-                  </div>
-                </div>
-                <div className="px-2.5 pb-1 pt-2 text-[10.5px] leading-snug text-muted-foreground">
-                  Local demo profile — no real authentication or session.
-                </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleSignOut}
-                  className="pcb-row mt-1 flex h-9 w-full items-center gap-2 rounded-[7px] border-none bg-redsoft px-[11px] text-[13px] font-semibold text-destructive"
-                >
-                  <LogOut size={15} aria-hidden="true" />
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+          <ThemeToggle isDark={dark} onToggle={onToggleDark} />
         </div>
       </div>
-
-      <Toast message={signOutToast} />
     </header>
   );
 }

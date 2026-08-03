@@ -61,7 +61,7 @@ export default function AutonomyConfigPage() {
   // Derived entirely from the current `grid` state — this is the fix for the bug
   // where these used to read the static `autonomyGrid` import and never moved
   // when a cell was edited.
-  const { statCards, totalCells, naCount, changedCount } = useMemo(() => {
+  const { statCards, totalCells, changedCount } = useMemo(() => {
     const cells = Object.values(grid);
     const total = cells.length;
     const countLevel = (lvl: AutonomyLevel) => cells.filter((c) => c.level === lvl).length;
@@ -88,13 +88,12 @@ export default function AutonomyConfigPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Autonomy Configuration</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Workflow Autonomy</h1>
           <p className="max-w-[820px] text-[13.5px] leading-[1.55] text-muted-foreground">
-            Set how much authority the AI agent has at each stage of the AP document lifecycle.
-            Configure what the AI can do alone, what it proposes for human confirmation, and what
-            must always be a human decision. Saved locally on this device.
+            Decide what the AI can do on its own, what it needs your sign-off for, and what always
+            stays human. Saved locally on this device.
           </p>
         </div>
         <div className="flex flex-none items-center gap-2">
@@ -115,7 +114,7 @@ export default function AutonomyConfigPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-stretch justify-between gap-4">
+      <div className="mb-3 flex flex-wrap items-stretch gap-4">
         <div className="flex flex-1 flex-wrap gap-3">
           {statCards.map((s) => {
             const m = META[s.level];
@@ -123,11 +122,11 @@ export default function AutonomyConfigPage() {
             return (
               <div
                 key={s.level}
-                className="flex flex-1 items-start gap-3 rounded-xl border p-4"
+                className="flex flex-1 items-start gap-3 rounded-xl border p-3"
                 style={{ background: m.bg, borderColor: m.border, minWidth: 230 }}
               >
                 <span
-                  className="flex h-9 w-9 flex-none items-center justify-center rounded-[9px]"
+                  className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px]"
                   style={{ background: '#fff', color: m.color }}
                 >
                   <Icon size={17} />
@@ -146,62 +145,40 @@ export default function AutonomyConfigPage() {
             );
           })}
         </div>
-        <div className="flex flex-col items-end justify-center whitespace-nowrap text-right text-[12.5px] text-muted-foreground">
-          <span>{totalCells - naCount} configurable stages · {naCount} N/A</span>
-          <span>{docTypes.length} document types × {autonomyStages.length} workflow stages</span>
-        </div>
       </div>
 
-      <div className="mb-4 flex items-start gap-3 rounded-xl border p-4" style={{ background: '#FEFBF0', borderColor: '#F0E6C8' }}>
+      <div className="mb-3 flex items-start gap-3 rounded-xl border p-3" style={{ background: '#FEFBF0', borderColor: '#F0E6C8' }}>
         <Info size={17} className="mt-0.5 flex-none text-muted-foreground" />
         <div className="text-[13px] leading-[1.6] text-text2">
-          <strong className="font-bold text-foreground">Design principle:</strong> Some gates are
-          human today because the AI model is still maturing — these can be promoted as accuracy
-          improves. Others remain human by design — they are governance and compliance
-          checkpoints, not capability gaps, and should never be automated.
-          <div className="mt-2 flex flex-wrap gap-4">
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: MATURITY_BLUE }}>
-              <span className="h-2 w-2 rounded-full" style={{ background: MATURITY_BLUE }} />
-              Maturity-gated
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: '#B45309' }}>
-              <Lock size={12} />
-              Permanently locked
-            </span>
-          </div>
+          <strong className="font-semibold text-foreground">Why some gates are human:</strong> Some
+          are human for now because the AI is still learning, and can be automated later. Others
+          stay human by policy — compliance checks that should never be automated.
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2.5">
-          <Legend icon={Zap} bg={META.auto.bg} color={META.auto.color} bd={META.auto.border} text="Autonomous" />
-          <Legend icon={Eye} bg={META.assist.bg} color={META.assist.color} bd={META.assist.border} text="AI-Assisted" />
-          <Legend icon={Lock} bg={META.human.bg} color={META.human.color} bd={META.human.border} text="Human-Required" />
-          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-[12.5px] font-semibold text-faint" style={{ borderColor: 'var(--border2)' }}>
-            — N/A
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-4 text-[12px] font-semibold">
-          <span className="inline-flex items-center gap-1.5" style={{ color: MATURITY_BLUE }}>
-            <span className="h-2 w-2 rounded-full" style={{ background: MATURITY_BLUE }} />
-            Maturity-gated (promotable)
-          </span>
-          <span className="inline-flex items-center gap-1.5" style={{ color: '#B45309' }}>
-            <Lock size={11} />
-            Locked (compliance gate)
-          </span>
-        </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2.5">
+        <Legend icon={Zap} bg={META.auto.bg} color={META.auto.color} bd={META.auto.border} text="Autonomous" />
+        <Legend icon={Eye} bg={META.assist.bg} color={META.assist.color} bd={META.assist.border} text="AI-Assisted" />
+        <Legend icon={Lock} bg={META.human.bg} color={META.human.color} bd={META.human.border} text="Human-Required" />
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: MATURITY_BLUE }}>
+          <span className="h-2 w-2 rounded-full" style={{ background: MATURITY_BLUE }} />
+          Maturity-gated (promotable)
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: '#B45309' }}>
+          <Lock size={11} />
+          Locked (compliance gate)
+        </span>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
         <div className="grid gap-2" style={{ gridTemplateColumns: '170px repeat(7,minmax(120px,1fr))', minWidth: 1000 }}>
-          <div className="flex items-end pb-1.5 text-[11.5px] font-bold uppercase tracking-[.05em] text-faint">
+          <div className="flex items-end pb-1.5 text-[11.5px] font-medium text-faint">
             Document Type
           </div>
           {autonomyStages.map((sg) => (
             <div
               key={sg}
-              className="flex items-end justify-center pb-1.5 text-center text-[11.5px] font-bold uppercase tracking-[.03em] text-muted-foreground"
+              className="flex items-end justify-center pb-1.5 text-center text-[11.5px] font-medium text-muted-foreground"
             >
               {sg}
             </div>

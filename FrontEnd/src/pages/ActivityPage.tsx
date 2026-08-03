@@ -60,7 +60,7 @@ export default function ActivityPage() {
     <div className="pcb-view">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Activity</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Activity</h1>
           <p className="text-[13.5px] text-muted-foreground">
             Sample/demo activity feed — not a persisted audit trail
           </p>

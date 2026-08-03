@@ -28,6 +28,13 @@ interface KpiTile {
 }
 
 interface MonthTrend { m: string; inv: number; exc: number; }
+
+// Which document type the "vs. Exceptions" trend chart is scoped to — a filter
+// on the chart itself (mirrors the Exception Types severity filter below it),
+// not a page-wide filter.
+type TrendDocType = 'purchase_order' | 'grn' | 'invoice';
+const TREND_DOC_TYPES: TrendDocType[] = ['purchase_order', 'grn', 'invoice'];
+const TREND_FILTER_LABELS: Record<TrendDocType, string> = { purchase_order: 'PO', grn: 'GRN', invoice: 'INV' };
 interface ExcTypeCount { label: string; n: number; attn: boolean; }
 interface SupplierCount { name: string; n: number; }
 
@@ -112,7 +119,7 @@ interface RechartsTooltipProps<T> {
   label?: string;
 }
 
-function MonthTooltip({ active, payload, label }: RechartsTooltipProps<MonthTrend>) {
+function MonthTooltip({ active, payload, label, docLabel }: RechartsTooltipProps<MonthTrend> & { docLabel: string }) {
   if (!active || !payload?.length) return null;
   const inv = payload.find((p) => p.dataKey === 'inv')?.value ?? 0;
   const exc = payload.find((p) => p.dataKey === 'exc')?.value ?? 0;
@@ -122,7 +129,7 @@ function MonthTooltip({ active, payload, label }: RechartsTooltipProps<MonthTren
       <div className="mb-1.5 text-[12px] font-bold">{label}</div>
       <div className="flex items-center gap-2 text-[12px] text-[#c3cce3]">
         <span className="h-2 w-2 flex-none rounded-[2px] bg-navy2" />
-        Invoices
+        {docLabel}
         <strong className="ml-auto tabular-nums text-white">{inv.toLocaleString('en-US')}</strong>
       </div>
       <div className="mt-1 flex items-center gap-2 text-[12px] text-[#c3cce3]">
@@ -159,6 +166,7 @@ export default function ReportingPage() {
   const [cfrom, setCfrom] = useState('');
   const [cto, setCto] = useState('');
   const [severity, setSeverity] = useState<Severity | null>(null);
+  const [trendDocType, setTrendDocType] = useState<TrendDocType>('invoice');
 
   const [rawEmails, setRawEmails] = useState<EmailRow[]>([]);
   const [rawDocs, setRawDocs] = useState<DocRow[]>([]);
@@ -235,7 +243,11 @@ export default function ReportingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawEmails, rawDocs, rawExcs, winStart, winEnd]);
 
-  // ---- Invoices vs Exceptions monthly trend ----
+  // ---- <Doc Type> vs Exceptions monthly trend ----
+  // Scoped by trendDocType (PO / GRN / INV): "invoices" is a documents-table
+  // filter (document_type), but exceptions have no document_type of their own —
+  // they're scoped to the same type via the document_ui_view lookup (uiRowMap),
+  // the same one fetchDocumentUiRows already populates for the exceptions list.
   const trend: MonthTrend[] = useMemo(() => {
     const months = new Map<number, MonthTrend>();
     const bump = (iso: string | null, key: 'inv' | 'exc') => {
@@ -246,11 +258,14 @@ export default function ReportingPage() {
       e[key] += 1;
       months.set(mk, e);
     };
-    rawDocs.forEach((d) => { if (isInvoiceType(d.document_type)) bump(d.created_at, 'inv'); });
-    rawExcs.forEach((e) => bump(e.created_at, 'exc'));
+    rawDocs.forEach((d) => { if ((d.document_type ?? '').toLowerCase() === trendDocType) bump(d.created_at, 'inv'); });
+    rawExcs.forEach((e) => {
+      const docType = e.document_id ? uiRowMap.get(e.document_id)?.document_type?.toLowerCase() : null;
+      if (docType === trendDocType) bump(e.created_at, 'exc');
+    });
     return [...months.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawDocs, rawExcs, winStart, winEnd]);
+  }, [rawDocs, rawExcs, uiRowMap, trendDocType, winStart, winEnd]);
 
   // ---- Exception Types (severity-filtered; severity-weighted attn flag) ----
   const exceptionTypeCounts: ExcTypeCount[] = useMemo(() => {
@@ -394,7 +409,7 @@ export default function ReportingPage() {
   const exportCsv = () => {
     downloadReportCsv([
       { title: 'KPI Tiles', headers: ['Label', 'Value', 'Note'], rows: kpiTiles.map((k) => [k.label, k.value, k.sub]) },
-      { title: 'Invoices vs Exceptions (by month)', headers: ['Month', 'Invoices', 'Exceptions'], rows: trend.map((t) => [t.m, t.inv, t.exc]) },
+      { title: `${REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} vs Exceptions (by month)`, headers: ['Month', REPORTING_DOCUMENT_TYPE_LABELS[trendDocType], 'Exceptions'], rows: trend.map((t) => [t.m, t.inv, t.exc]) },
       { title: `Exception Types${severity ? ` (${SEVERITY_LABELS[severity]})` : ''}`, headers: ['Type', 'Count', 'Highest Impact'], rows: exceptionTypeCounts.map((t) => [t.label, t.n, t.attn ? 'Yes' : '']) },
       { title: 'Document Mix', headers: ['Type', 'Count'], rows: documentMix.rows.map((r) => [r.label, r.n]) },
       { title: 'Top Exception Suppliers', headers: ['Supplier', 'Count'], rows: suppliers.map((s) => [s.name, s.n]) },
@@ -405,7 +420,7 @@ export default function ReportingPage() {
     <div className="pcb-view">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Reporting</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Reporting</h1>
           <p className="text-[13.5px] text-muted-foreground">
             {PERIOD_LABELS[period]} · processing &amp; exception trends
           </p>
@@ -448,7 +463,7 @@ export default function ReportingPage() {
                   );
                 })}
                 <div className="mt-1 flex flex-col gap-2 border-t border-border2 px-1.5 pb-1 pt-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[.04em] text-faint">Custom Range</span>
+                  <span className="text-[11px] font-medium text-faint">Custom Range</span>
                   <input type="date" value={cfrom} onChange={(e) => setCfrom(e.target.value)} className="h-[32px] w-full rounded-lg border border-line bg-surface px-2.5 font-sans text-[12.5px] text-foreground" />
                   <input type="date" value={cto} onChange={(e) => setCto(e.target.value)} className="h-[32px] w-full rounded-lg border border-line bg-surface px-2.5 font-sans text-[12.5px] text-foreground" />
                   <button
@@ -472,7 +487,7 @@ export default function ReportingPage() {
           return (
             <div key={k.key} className="rounded-xl border border-border bg-surface p-4 shadow-[0_1px_2px_rgba(16,24,40,.04)]">
               <div className="mb-2.5 flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-[.05em] text-muted-foreground">{k.label}</span>
+                <span className="text-[11px] font-medium text-muted-foreground">{k.label}</span>
                 <Icon size={15} color={color} />
               </div>
               <div className="text-[26px] font-extrabold leading-none tracking-[-.03em] tabular-nums" style={{ color }}>
@@ -486,22 +501,48 @@ export default function ReportingPage() {
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[14.5px] font-bold uppercase tracking-wide">Invoices vs. Exceptions</span>
-            <div className="flex gap-4">
+          <span className="mb-2 block text-[14.5px] font-semibold tracking-tight">
+            {REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} vs. Exceptions
+          </span>
+          {/* Legend + doc-type filter (PO / GRN / INV) share a row whose width
+              stays constant across filters — the legend uses the same short
+              code as the filter buttons, so this row never wraps and the
+              header height can't shift when the selected type changes. */}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="h-[11px] w-[11px] rounded-[3px] bg-navy" />Invoices
+                <span className="h-[11px] w-[11px] rounded-[3px] bg-navy" />{TREND_FILTER_LABELS[trendDocType]}
               </span>
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="h-[11px] w-[11px] rounded-[3px]" style={{ background: RED }} />Exceptions
               </span>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {TREND_DOC_TYPES.map((t) => {
+                const on = trendDocType === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTrendDocType(t)}
+                    className="pcb-btn h-7 rounded-md px-2.5 text-[11.5px] font-semibold"
+                    style={{
+                      border: `1px solid ${on ? 'var(--navy)' : 'var(--line)'}`,
+                      background: on ? 'var(--navy)' : 'var(--surface)',
+                      color: on ? '#fff' : 'var(--text3)',
+                    }}
+                  >
+                    {TREND_FILTER_LABELS[t]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {/* Text alternative for screen readers — the bar chart itself has no
               accessible data representation of its own. */}
           <p className="sr-only">
-            Invoices versus exceptions by month:{' '}
-            {trend.length === 0 ? 'no activity in this period.' : trend.map((t) => `${t.m}: ${t.inv} invoices, ${t.exc} exceptions`).join('; ')}
+            {REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} versus exceptions by month:{' '}
+            {trend.length === 0 ? 'no activity in this period.' : trend.map((t) => `${t.m}: ${t.inv} ${REPORTING_DOCUMENT_TYPE_LABELS[trendDocType].toLowerCase()}, ${t.exc} exceptions`).join('; ')}
           </p>
           <div style={{ height: 254 }} aria-hidden="true">
             {trend.length === 0 ? (
@@ -511,7 +552,7 @@ export default function ReportingPage() {
                 <BarChart data={trend} barGap={5} margin={{ top: 24, right: 0, bottom: 0, left: 0 }}>
                   <XAxis dataKey="m" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--muted)' }} />
                   <YAxis hide domain={[0, 'dataMax']} />
-                  <Tooltip content={<MonthTooltip />} cursor={{ fill: 'rgba(30,58,138,.06)' }} />
+                  <Tooltip content={<MonthTooltip docLabel={REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} />} cursor={{ fill: 'rgba(30,58,138,.06)' }} />
                   <Bar dataKey="inv" fill="var(--navy)" radius={[5, 5, 0, 0]} maxBarSize={30} />
                   <Bar dataKey="exc" fill={RED} radius={[5, 5, 0, 0]} maxBarSize={30} />
                 </BarChart>
@@ -522,7 +563,7 @@ export default function ReportingPage() {
 
         <div className="flex flex-col rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-[14.5px] font-bold uppercase tracking-wide">Processing Health</span>
+            <span className="text-[14.5px] font-semibold tracking-tight">Processing Health</span>
           </div>
           <div className="mb-1.5 flex items-baseline gap-2">
             <span className="text-[38px] font-extrabold leading-none tracking-[-.03em] tabular-nums" style={{ color: GREEN }}>
@@ -556,7 +597,7 @@ export default function ReportingPage() {
 
       <div className="rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[14.5px] font-bold uppercase tracking-wide">Exception Types</span>
+          <span className="text-[14.5px] font-semibold tracking-tight">Exception Types</span>
           {/* Severity filter lives here — it only ever scoped this chart, so it
               belongs on the chart rather than masquerading as a global filter. */}
           <div className="flex flex-wrap items-center gap-1.5">
@@ -630,7 +671,7 @@ export default function ReportingPage() {
       <div className="mb-[18px] mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <div className="mb-4 flex items-center justify-between gap-2">
-            <span className="text-[14.5px] font-bold uppercase tracking-wide">Document Mix</span>
+            <span className="text-[14.5px] font-semibold tracking-tight">Document Mix</span>
             <span className="text-[12px] text-muted-foreground">
               <strong className="tabular-nums text-foreground">{documentMix.total.toLocaleString('en-US')}</strong> in {PERIOD_LABELS[period].toLowerCase()}
             </span>
@@ -667,7 +708,7 @@ export default function ReportingPage() {
         </div>
 
         <div className="rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
-          <span className="mb-4 block text-[14.5px] font-bold uppercase tracking-wide">Top Exception Suppliers</span>
+          <span className="mb-4 block text-[14.5px] font-semibold tracking-tight">Top Exception Suppliers</span>
           <div className="flex flex-col gap-3.5">
             {suppliers.length === 0 && (
               <p className="text-[12.5px] text-muted-foreground">No exceptions logged yet.</p>
@@ -696,7 +737,7 @@ export default function ReportingPage() {
         </div>
         <div className="flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-[13.5px] font-bold uppercase tracking-wide text-navy">AI Insight</span>
+            <span className="text-[13.5px] font-semibold tracking-tight text-navy">AI Insight</span>
           </div>
           <p className="text-[13.5px] leading-[1.55] text-text2">
             {insightLoading ? 'Thinking…' : insightResponse || defaultInsight}

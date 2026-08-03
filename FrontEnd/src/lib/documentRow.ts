@@ -119,7 +119,7 @@ const DOC_TYPE_CODE: Record<string, string> = {
   supplier_statement: 'SS',
 };
 
-function docTypeCode(documentType: string): string {
+export function docTypeCode(documentType: string): string {
   const key = documentType.trim().toLowerCase();
   if (DOC_TYPE_CODE[key]) return DOC_TYPE_CODE[key];
   const letters = key.replace(/[^a-z]/g, '').toUpperCase();
@@ -162,6 +162,30 @@ export function titleCaseDocType(documentType: string | null | undefined): strin
   return documentType
     .split('_')
     .map((word) => (DOC_TYPE_ACRONYMS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(' ');
+}
+
+// Supplier/ship-to party names come straight from AI-extracted header fields
+// with inconsistent source casing — some fully upper ("AMERICAN CENTRIFUGE
+// OPERATING LLC"), some already properly cased ("Axitronics"). Rendered
+// side-by-side, the all-caps ones read as visually larger/heavier at the same
+// font-size (no ascenders/descenders), making the list look uneven. This
+// title-cases only the all-caps words, leaves already-mixed-case words
+// untouched (don't risk mangling a name that's already correct), and keeps
+// short tokens (state codes, initials like "F.") and known legal-entity
+// suffixes fully capitalized rather than naively title-casing them.
+const PARTY_NAME_SUFFIXES = new Set(['LLC', 'INC', 'ULC', 'LTD', 'LLP', 'LP', 'CORP', 'PLC', 'CO', 'GMBH', 'PVT', 'DBA', 'USA']);
+
+export function titleCasePartyName(name: string | null | undefined): string {
+  if (!name) return '';
+  return name
+    .split(' ')
+    .map((word) => {
+      const bare = word.replace(/[.,]/g, '');
+      const isAllCaps = bare.length > 2 && bare === bare.toUpperCase() && bare !== bare.toLowerCase();
+      if (!isAllCaps || PARTY_NAME_SUFFIXES.has(bare)) return word;
+      return word.charAt(0) + word.slice(1).toLowerCase();
+    })
     .join(' ');
 }
 

@@ -385,7 +385,7 @@ export default function DashboardPage() {
     <div className="pcb-view">
       <div className="mb-[18px] flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">Payables Overview</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Payables Overview</h1>
         </div>
         <div className="flex gap-2">
           <div className="relative">
@@ -430,7 +430,7 @@ export default function DashboardPage() {
                 </button>
                 {customOpen && (
                   <div className="flex flex-col gap-2 px-1.5 pb-1 pt-2">
-                    <label className="text-[11px] font-bold uppercase tracking-[.04em] text-faint">
+                    <label className="text-[11px] font-medium text-faint">
                       From
                       <input
                         type="date"
@@ -440,7 +440,7 @@ export default function DashboardPage() {
                         className="mt-1 h-[34px] w-full rounded-lg border border-line bg-surface px-2.5 font-sans text-[13px] text-foreground"
                       />
                     </label>
-                    <label className="text-[11px] font-bold uppercase tracking-[.04em] text-faint">
+                    <label className="text-[11px] font-medium text-faint">
                       To
                       <input
                         type="date"
@@ -494,7 +494,7 @@ export default function DashboardPage() {
 
       <div className="mb-[18px] rounded-xl border border-border bg-surface p-[20px_22px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
         <div className="mb-5 flex items-center justify-between">
-          <div className="text-xs font-bold uppercase tracking-[.06em] text-muted-foreground">Document Pipeline</div>
+          <div className="text-xs font-semibold text-muted-foreground">Document Pipeline</div>
           <span className="text-[12.5px] text-faint">{pipelineLabel}</span>
         </div>
         <div className="flex items-start gap-2 overflow-x-auto" style={{ minWidth: 0 }}>
@@ -503,7 +503,16 @@ export default function DashboardPage() {
               {s.hasConn && (
                 <div
                   className="absolute top-[19px] h-1 overflow-hidden rounded"
-                  style={{ left: 'calc(-50% + 20px)', right: 'calc(50% + 20px)', background: 'var(--border2)' }}
+                  // `left` and `right` both inset 20px from center to stop flush at each
+                  // circle's edge (20px = half the h-10/w-10 circle's diameter) — but the
+                  // row above has `gap-2` (8px) between steps, which only the *left* side
+                  // needs to additionally account for: `right` is measured relative to
+                  // this step's own container, so it already lands exactly on this
+                  // circle's edge, but `left` reaches back into the *previous* step's
+                  // container, which starts 8px further away than a gap-less row would.
+                  // Without subtracting that 8px, the line stops 8px short of the
+                  // previous circle — visible as a gap between every icon and its line.
+                  style={{ left: 'calc(-50% + 12px)', right: 'calc(50% + 20px)', background: 'var(--border2)' }}
                 >
                   <div
                     className="h-full rounded"
@@ -547,7 +556,7 @@ export default function DashboardPage() {
       <div className="mb-[18px] grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr]">
         <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <div className="flex items-center justify-between border-b border-border2 px-[18px] py-[15px]">
-            <span className="text-[14.5px] font-bold uppercase tracking-wide">Oldest in Queue</span>
+            <span className="text-[14.5px] font-semibold tracking-tight">Oldest in Queue</span>
             <Link to="/worklist" className="text-[12.5px] font-semibold">View all</Link>
           </div>
           <div>
@@ -568,7 +577,7 @@ export default function DashboardPage() {
 
         <div className="self-start overflow-hidden rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <div className="flex items-center justify-between border-b border-border2 px-[18px] py-[15px]">
-            <span className="text-[14.5px] font-bold uppercase tracking-wide">Exceptions by Severity</span>
+            <span className="text-[14.5px] font-semibold tracking-tight">Exceptions by Severity</span>
           </div>
           <div className="p-2">
             {severityCounts.map((s) => (
@@ -603,7 +612,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-[13.5px] font-bold uppercase tracking-wide text-navy">AI Insight</span>
+            <span className="text-[13.5px] font-semibold tracking-tight text-navy">AI Insight</span>
           </div>
           <p className="text-[13.5px] leading-[1.55] text-text2">
             {insightLoading ? 'Thinking…' : insightResponse || defaultInsight}

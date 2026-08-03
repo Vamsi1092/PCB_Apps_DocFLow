@@ -207,7 +207,7 @@ export type ReportingDocumentType = 'invoice' | 'purchase_order' | 'grn' | 'ackn
 export const REPORTING_DOCUMENT_TYPE_LABELS: Record<ReportingDocumentType, string> = {
   invoice: 'Invoice',
   purchase_order: 'Purchase Order',
-  grn: 'GRN',
+  grn: 'Goods Receipt',
   acknowledgement: 'Acknowledgement',
 };
 

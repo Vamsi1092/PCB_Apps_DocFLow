@@ -191,10 +191,17 @@ button {
   box-shadow: 0 0 0 2px rgba(30,58,138,.18);
 }
 .pcb-node {
-  transition: transform .2s cubic-bezier(.34,1.56,.64,1) !important;
+  /* Deliberately not a transform: the Document Pipeline's connector lines
+     are pixel-calibrated to this circle's actual (unchanging) box size —
+     scaling it on hover used to grow its edges past where the lines meet
+     it, visibly detaching them, and pushed it into the pipeline row's
+     coerced overflow-y clipping. A glow/brightness cue gives the same
+     "lit up" hover feedback without moving any edges. */
+  transition: box-shadow .2s ease, filter .2s ease !important;
 }
 .pcb-node:hover {
-  transform: scale(1.28) !important;
+  box-shadow: 0 0 0 4px rgba(30,58,138,.18), 0 4px 10px rgba(30,58,138,.35) !important;
+  filter: brightness(1.08) !important;
 }
 .pcb-lift {
   transition: box-shadow .18s ease, transform .18s ease;

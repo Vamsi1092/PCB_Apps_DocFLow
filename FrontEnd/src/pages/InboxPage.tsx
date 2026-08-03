@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, Check, Copy, File, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Search,
+  AlertTriangle, Check, Copy, File, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, MapPin, Search,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/DataTable';
 import { RED } from '@/lib/theme';
 import { type InboxAttachment, type InboxMessage } from '@/data';
 import { supabase } from '@/lib/supabase';
+import { titleCasePartyName } from '@/lib/documentRow';
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -24,6 +25,12 @@ function fmtReceived(iso: string): string {
 const TOOLTIP_WIDTH = 400;
 const TOOLTIP_MARGIN = 12;
 const TOOLTIP_HIDE_DELAY = 150;
+// Caps how tall a tooltip can render (paired with max-h/overflow-y-auto on the
+// tooltip itself) so a long summary/address can't grow past the viewport —
+// also used to clamp `top` in the 'right' placement branch below, since that
+// branch previously anchored at `rect.top` with no check against the bottom
+// edge, letting tooltips for rows near the bottom of the page run off-screen.
+const TOOLTIP_MAX_HEIGHT = 260;
 
 type HoverState =
   | { key: string; placement: 'right'; top: number; left: number }
@@ -162,11 +169,11 @@ export default function InboxPage() {
             })),
             summary: ai.ai_intent ?? '',
             supplier: {
-              name: header.supplier_name ?? '',
+              name: titleCasePartyName(header.supplier_name),
               address: header.supplier_address ?? '',
             },
             vendor: {
-              name: header.ship_to_name ?? '',
+              name: titleCasePartyName(header.ship_to_name),
               address: header.ship_to_address ?? '',
             },
           };
@@ -196,7 +203,8 @@ export default function InboxPage() {
     cancelAddressHide();
     const spaceRight = window.innerWidth - rect.right;
     if (spaceRight >= TOOLTIP_WIDTH + TOOLTIP_MARGIN) {
-      setAddressHover({ text, placement: 'right', top: rect.top, left: rect.right + 10 });
+      const top = Math.max(TOOLTIP_MARGIN, Math.min(rect.top, window.innerHeight - TOOLTIP_MAX_HEIGHT - TOOLTIP_MARGIN));
+      setAddressHover({ text, placement: 'right', top, left: rect.right + 10 });
     } else {
       const left = Math.max(TOOLTIP_MARGIN, Math.min(rect.left, window.innerWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN));
       setAddressHover({ text, placement: 'above', bottom: window.innerHeight - rect.top + 10, left });
@@ -210,7 +218,8 @@ export default function InboxPage() {
     // attachment filename, and keying on that made every row's tooltip
     // resolve to whichever message happened to match first.
     if (spaceRight >= TOOLTIP_WIDTH + TOOLTIP_MARGIN) {
-      setHover({ key: id, placement: 'right', top: rect.top, left: rect.right + 10 });
+      const top = Math.max(TOOLTIP_MARGIN, Math.min(rect.top, window.innerHeight - TOOLTIP_MAX_HEIGHT - TOOLTIP_MARGIN));
+      setHover({ key: id, placement: 'right', top, left: rect.right + 10 });
     } else {
       const left = Math.max(TOOLTIP_MARGIN, Math.min(rect.left, window.innerWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN));
       setHover({ key: id, placement: 'above', bottom: window.innerHeight - rect.top + 10, left });
@@ -247,22 +256,22 @@ export default function InboxPage() {
       key: 'supplier',
       label: 'Supplier',
       cell: (m) => (
-        <div className="max-w-[240px]">
-          <div className={m.unread ? 'text-[13.5px] font-bold leading-snug' : 'text-[13.5px] font-medium leading-snug'}>
-            {m.supplier.name || (m.extracted ? '—' : <span className="italic text-faint">Not yet extracted</span>)}
-          </div>
-          <button
-            type="button"
-            className="block max-w-full truncate border-none bg-transparent p-0 text-left text-[12px] text-muted-foreground underline decoration-dotted decoration-faint underline-offset-2 hover:text-text2"
-            onMouseEnter={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.supplier.address)}
-            onMouseLeave={scheduleAddressHide}
-            onFocus={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.supplier.address)}
-            onBlur={scheduleAddressHide}
-            onKeyDown={(e) => { if (e.key === 'Escape') setAddressHover(null); }}
-            aria-label={m.supplier.address ? `Supplier address: ${m.supplier.address}` : 'No supplier address'}
-          >
-            {m.supplier.address || '—'}
-          </button>
+        <div className={m.unread ? 'max-w-[190px] break-words text-[13.5px] font-bold leading-snug' : 'max-w-[190px] break-words text-[13.5px] font-medium leading-snug'}>
+          {m.supplier.name || (m.extracted ? '—' : <span className="italic text-faint">Not yet extracted</span>)}
+          {m.supplier.address && (
+            <button
+              type="button"
+              className="ml-1 inline-flex h-[13px] w-[13px] items-center justify-center align-middle text-faint hover:text-text2"
+              onMouseEnter={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.supplier.address)}
+              onMouseLeave={scheduleAddressHide}
+              onFocus={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.supplier.address)}
+              onBlur={scheduleAddressHide}
+              onKeyDown={(e) => { if (e.key === 'Escape') setAddressHover(null); }}
+              aria-label={`Supplier address: ${m.supplier.address}`}
+            >
+              <MapPin size={13} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -270,22 +279,22 @@ export default function InboxPage() {
       key: 'vendor',
       label: 'Vendor',
       cell: (m) => (
-        <div className="max-w-[240px]">
-          <div className="text-[13.5px] font-medium leading-snug">
-            {m.vendor.name || (m.extracted ? '—' : <span className="italic text-faint">Not yet extracted</span>)}
-          </div>
-          <button
-            type="button"
-            className="block max-w-full truncate border-none bg-transparent p-0 text-left text-[12px] text-muted-foreground underline decoration-dotted decoration-faint underline-offset-2 hover:text-text2"
-            onMouseEnter={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.vendor.address)}
-            onMouseLeave={scheduleAddressHide}
-            onFocus={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.vendor.address)}
-            onBlur={scheduleAddressHide}
-            onKeyDown={(e) => { if (e.key === 'Escape') setAddressHover(null); }}
-            aria-label={m.vendor.address ? `Vendor address: ${m.vendor.address}` : 'No vendor address'}
-          >
-            {m.vendor.address || '—'}
-          </button>
+        <div className="max-w-[190px] break-words text-[13.5px] font-medium leading-snug">
+          {m.vendor.name || (m.extracted ? '—' : <span className="italic text-faint">Not yet extracted</span>)}
+          {m.vendor.address && (
+            <button
+              type="button"
+              className="ml-1 inline-flex h-[13px] w-[13px] items-center justify-center align-middle text-faint hover:text-text2"
+              onMouseEnter={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.vendor.address)}
+              onMouseLeave={scheduleAddressHide}
+              onFocus={(e) => openAddressHover(e.currentTarget.getBoundingClientRect(), m.vendor.address)}
+              onBlur={scheduleAddressHide}
+              onKeyDown={(e) => { if (e.key === 'Escape') setAddressHover(null); }}
+              aria-label={`Vendor address: ${m.vendor.address}`}
+            >
+              <MapPin size={13} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -352,7 +361,7 @@ export default function InboxPage() {
     <div className="pcb-view">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="mb-[3px] text-[23px] font-bold uppercase tracking-[.01em]">AP Inbox</h1>
+          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">AP Inbox</h1>
           <p className="text-[13.5px] text-muted-foreground">
             Emails from the Accounts Payable folder · auto-captured from email &amp; EDI
           </p>
@@ -404,12 +413,13 @@ export default function InboxPage() {
         // pixels below the viewport on long (real-data) tables instead of next to the hovered row.
         <div
           role="tooltip"
-          className="pcb-view fixed z-[200] min-w-[280px] max-w-[380px] rounded-xl bg-[#111a33] p-[13px_15px] shadow-[0_12px_36px_rgba(0,0,0,.32)]"
-          style={
-            hover!.placement === 'right'
+          className="pcb-view fixed z-[200] min-w-[280px] max-w-[380px] overflow-y-auto rounded-xl bg-[#111a33] p-[13px_15px] shadow-[0_12px_36px_rgba(0,0,0,.32)]"
+          style={{
+            maxHeight: TOOLTIP_MAX_HEIGHT,
+            ...(hover!.placement === 'right'
               ? { top: hover!.top, left: hover!.left }
-              : { bottom: hover!.bottom, left: hover!.left }
-          }
+              : { bottom: hover!.bottom, left: hover!.left }),
+          }}
           onMouseEnter={cancelHide}
           onMouseLeave={scheduleHide}
         >
@@ -424,17 +434,18 @@ export default function InboxPage() {
         // portal to document.body rather than rendering inline.
         <div
           role="tooltip"
-          className="pcb-view fixed z-[200] min-w-[260px] max-w-[380px] rounded-xl bg-[#111a33] p-[14px_16px] text-white shadow-[0_12px_36px_rgba(0,0,0,.32)]"
-          style={
-            addressHover.placement === 'right'
+          className="pcb-view fixed z-[200] min-w-[260px] max-w-[380px] overflow-y-auto rounded-xl bg-[#111a33] p-[14px_16px] text-white shadow-[0_12px_36px_rgba(0,0,0,.32)]"
+          style={{
+            maxHeight: TOOLTIP_MAX_HEIGHT,
+            ...(addressHover.placement === 'right'
               ? { top: addressHover.top, left: addressHover.left }
-              : { bottom: addressHover.bottom, left: addressHover.left }
-          }
+              : { bottom: addressHover.bottom, left: addressHover.left }),
+          }}
           onMouseEnter={cancelAddressHide}
           onMouseLeave={scheduleAddressHide}
         >
           <div className="mb-1.5 flex items-center justify-between gap-3">
-            <div className="text-[10.5px] font-bold uppercase tracking-[.06em] text-[#8ca0d6]">Address</div>
+            <div className="text-[10.5px] font-medium text-[#8ca0d6]">Address</div>
             <button
               type="button"
               className="flex items-center gap-1 rounded-md border border-white/15 px-2 py-1 text-[11px] font-medium text-[#c3cce3] hover:bg-white/10"
