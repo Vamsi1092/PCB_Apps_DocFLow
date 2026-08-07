@@ -8,6 +8,7 @@ import { RED } from '@/lib/theme';
 import { type InboxAttachment, type InboxMessage } from '@/data';
 import { supabase } from '@/lib/supabase';
 import { titleCasePartyName } from '@/lib/documentRow';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -359,9 +360,9 @@ export default function InboxPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">AP Inbox</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <SidebarToggle />
           <p className="text-[13.5px] text-muted-foreground">
             Emails from the Accounts Payable folder · auto-captured from email &amp; EDI
           </p>

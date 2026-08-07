@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 import { RED, GREEN } from '@/lib/theme';
@@ -6,6 +6,9 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/Toast';
 import { fetchDocumentUiRows, docTypeCode, UNRESOLVED_SUPPLIER, type DocumentUiRow } from '@/lib/documentRow';
+import { SidebarToggle } from '@/components/SidebarToggle';
+import { BorderTrail } from '@/components/ui/border-trail';
+import { cn } from '@/lib/utils';
 
 type Verdict = 'approved' | 'rejected';
 const PAGE_SIZE = 12;
@@ -139,11 +142,34 @@ export default function ApprovalsPage() {
   // persist anywhere. Kept even after a card would otherwise leave the list so the
   // confirmation banner has a moment to show.
   const [decisions, setDecisions] = useState<Record<string, Verdict>>({});
+  // Border-trail state per card: 'run' while the trail is looping the card edge,
+  // 'fade' for the brief opacity-out, absent once it should unmount. Purely a
+  // confirmation flourish on the card that was just decided.
+  const [trails, setTrails] = useState<Record<string, 'run' | 'fade'>>({});
+  const fadeTimers = useRef<number[]>([]);
   const { toast, showToast } = useToast();
+
+  useEffect(() => () => fadeTimers.current.forEach(window.clearTimeout), []);
 
   const decide = (id: string, verdict: Verdict) => {
     setDecisions((prev) => ({ ...prev, [id]: verdict }));
+    setTrails((prev) => ({ ...prev, [id]: 'run' }));
     showToast(verdict === 'approved' ? 'Invoice approved — queued for posting (not persisted)' : 'Invoice returned to the worklist (not persisted)');
+  };
+
+  // Trail finished its laps: fade it, then drop it from the DOM.
+  const endTrail = (id: string) => {
+    setTrails((prev) => (prev[id] === 'run' ? { ...prev, [id]: 'fade' } : prev));
+    fadeTimers.current.push(
+      window.setTimeout(() => {
+        setTrails((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 300),
+    );
   };
 
   // If a reviewer just arrived from Document Review's "Send to Approvals", give
@@ -157,7 +183,10 @@ export default function ApprovalsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resetDecisions = () => setDecisions({});
+  const resetDecisions = () => {
+    setDecisions({});
+    setTrails({});
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -208,9 +237,9 @@ export default function ApprovalsPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Approvals</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <SidebarToggle />
           <p className="text-[13.5px] text-muted-foreground">Awaiting your sign-off · {totalCount} pending</p>
         </div>
         {hasDecisions && (
@@ -249,12 +278,29 @@ export default function ApprovalsPage() {
             {visible.map((a) => {
               const verdict = decisions[a.id];
               const approvedVerdict = verdict === 'approved';
+              const trail = trails[a.id];
               return (
               <div
                 key={a.id}
-                className="rounded-xl bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)] transition-[border-color]"
+                className="relative rounded-xl bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)] transition-[border-color]"
                 style={{ border: `1px solid ${verdict ? (approvedVerdict ? '#bbf0c9' : '#f3c0c0') : 'var(--border)'}`, padding: '17px 18px' }}
               >
+                {/* Decision flourish: a light trail runs the card's edge — green for
+                    approved, red for returned — then fades out. */}
+                {trail && (
+                  <BorderTrail
+                    className={cn(
+                      'bg-gradient-to-l transition-opacity duration-300',
+                      approvedVerdict
+                        ? 'from-green-300 via-green-500 to-green-300 dark:from-green-700/30 dark:via-green-500 dark:to-green-700/30'
+                        : 'from-red-300 via-red-500 to-red-300 dark:from-red-700/30 dark:via-red-500 dark:to-red-700/30',
+                      trail === 'run' ? 'opacity-100' : 'opacity-0',
+                    )}
+                    size={120}
+                    transition={{ ease: [0, 0.5, 0.8, 0.5], duration: 4, repeat: 2 }}
+                    onAnimationComplete={() => endTrail(a.id)}
+                  />
+                )}
                 <div className="mb-3 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -291,7 +337,6 @@ export default function ApprovalsPage() {
                     >
                       {approvedVerdict ? '✓ Approved & posting' : '↩ Returned to Worklist'}
                     </div>
-                    <div className="mt-1.5 text-center text-[11px] text-faint">Not persisted — local to this session only</div>
                   </div>
                 ) : (
                   <div className="flex gap-[9px]">

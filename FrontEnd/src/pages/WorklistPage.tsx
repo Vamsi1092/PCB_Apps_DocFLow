@@ -11,6 +11,7 @@ import type { WorklistRow } from '@/data';
 import { supabase } from '@/lib/supabase';
 import { AP_DOCUMENT_SELECT, compareWorklistRows, fetchDocumentUiRows, titleCaseDocType, toWorklistRow, type ApDocRow } from '@/lib/documentRow';
 import { fetchLifecycle, type LifecycleStageName, type LifecycleStageRow } from '@/lib/lifecycle';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 // The hovered row's own document_type maps 1:1 onto a lifecycle stage name now
 // that document_type is a canonical enum (see FRONTEND_HANDOFF_FOR_VAMSI.md §4.2)
@@ -433,9 +434,9 @@ export default function WorklistPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Worklist</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <SidebarToggle />
           <p className="text-[13.5px] text-muted-foreground">
             All open documents · <span className="tabular-nums">{totalCount}</span> in queue
           </p>

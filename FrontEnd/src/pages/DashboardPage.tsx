@@ -9,6 +9,7 @@ import { GREEN, RED, sevColor, type Severity } from '@/lib/theme';
 import { kpiStrip } from '@/data';
 import { supabase } from '@/lib/supabase';
 import { fetchDocumentUiRows, maxSeverity, UNRESOLVED_SUPPLIER } from '@/lib/documentRow';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 interface KpiDef {
   icon: LucideIcon;
@@ -383,10 +384,8 @@ export default function DashboardPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-[18px] flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Payables Overview</h1>
-        </div>
+      <div className="mb-[18px] flex flex-wrap items-center justify-between gap-4">
+        <SidebarToggle />
         <div className="flex gap-2">
           <div className="relative">
             <button

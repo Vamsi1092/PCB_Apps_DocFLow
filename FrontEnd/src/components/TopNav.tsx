@@ -1,15 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, Menu, Search } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { RED } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { AP_DOCUMENT_SELECT, fetchDocumentUiRows, titleCaseDocType, toWorklistRow, UNRESOLVED_SUPPLIER, type ApDocRow, type DocumentUiRow } from '@/lib/documentRow';
 import type { WorklistRow } from '@/data';
-import logo from '@/assets/PCB_Logo.png';
+import logo from '@/assets/jdeai-logo-transparent.png';
 
 const SEARCH_RESULT_LIMIT = 8;
+
+// The current page's title, rendered in the bar so each page doesn't spend a
+// heading row on it. Deliberately not Sidebar's TABS labels — those are shorter
+// nav names ('Dashboard', 'Autonomy') where these are the page's own title.
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Payables Overview',
+  '/inbox': 'AP Inbox',
+  '/worklist': 'Worklist',
+  '/approvals': 'Approvals',
+  '/reporting': 'Reporting',
+  '/activity': 'Activity',
+  '/autonomy': 'Workflow Autonomy',
+  '/settings': 'Settings',
+};
+
+function pageTitle(pathname: string): string {
+  const exact = PAGE_TITLES[pathname];
+  if (exact) return exact;
+  // The document detail view keeps its own heading (the document's display id,
+  // which isn't knowable from the route), so name the section it sits under.
+  if (pathname.startsWith('/worklist/')) return 'Document Review';
+  return '';
+}
 
 interface SearchHit {
   key: string;
@@ -43,8 +66,6 @@ function canonicalSupplier(ui: DocumentUiRow | undefined): string {
 }
 
 interface TopNavProps {
-  sidebarExpanded: boolean;
-  onToggleSidebar: () => void;
   dark: boolean;
   onToggleDark: () => void;
   unreadCount: number;
@@ -52,13 +73,15 @@ interface TopNavProps {
 }
 
 /**
- * Fixed navy bar: hamburger + logo on the left, search + notifications +
- * theme toggle on the right (in that order). Profile/sign-out stays in
- * Sidebar.tsx's footer — the Notifications row there shares the same
+ * Fixed navy bar: logo on the left, current page title beside it, then search +
+ * notifications + theme toggle on the right (in that order). Profile/sign-out
+ * stays in Sidebar.tsx's footer — the Notifications row there shares the same
  * unread state as the bell button here (both live in App.tsx).
  */
-export function TopNav({ sidebarExpanded, onToggleSidebar, dark, onToggleDark, unreadCount, onMarkNotificationsRead }: TopNavProps) {
+export function TopNav({ dark, onToggleDark, unreadCount, onMarkNotificationsRead }: TopNavProps) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const title = pageTitle(pathname);
   const containerRef = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -229,21 +252,18 @@ export function TopNav({ sidebarExpanded, onToggleSidebar, dark, onToggleDark, u
   return (
     <header className="sticky top-0 z-50 bg-navy text-white shadow-[0_1px_0_rgba(255,255,255,.06),0_2px_10px_rgba(12,22,58,.18)]">
       <div className="flex h-[58px] items-stretch">
-        <div className="flex w-[180px] flex-none items-center gap-4 bg-white pl-4 pr-6 shadow-[2px_0_8px_rgba(0,0,0,.12)]">
-          <button
-            type="button"
-            title="Toggle navigation"
-            aria-label={sidebarExpanded ? 'Collapse navigation menu' : 'Expand navigation menu'}
-            aria-expanded={sidebarExpanded}
-            onClick={onToggleSidebar}
-            className="flex h-[34px] w-[34px] items-center justify-center rounded-lg border-none bg-transparent text-navy"
-          >
-            <Menu size={18} />
-          </button>
-          <img src={logo} alt="PCB Apps" className="block h-[26px] w-auto" />
+        {/* Nav toggle is not here — it renders at the top-left of the content
+            area via SidebarToggle, inside each page's header row. */}
+        {/* w-[180px] deliberately matches Sidebar's expanded width. The logo
+            fills that block now that the nav toggle has moved out of it. */}
+        <div className="flex w-[180px] flex-none items-center bg-[#0d1524] px-3 shadow-[2px_0_8px_rgba(0,0,0,.12)]">
+          <img src={logo} alt="JD'EAI" className="block h-[50px] w-full object-contain" />
         </div>
 
-        <div className="flex flex-1 items-center justify-end gap-3 px-[22px]">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-[22px]">
+          <h1 className="truncate text-[17px] font-semibold tracking-tight text-white">{title}</h1>
+
+          <div className="flex flex-none items-center gap-3">
           <div ref={containerRef} className="relative">
             <button
               type="button"
@@ -329,6 +349,7 @@ export function TopNav({ sidebarExpanded, onToggleSidebar, dark, onToggleDark, u
           </button>
 
           <ThemeToggle isDark={dark} onToggle={onToggleDark} />
+          </div>
         </div>
       </div>
     </header>

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, Download, Filter, Loader2, Mail, Send, Sparkles, TrendingUp, type LucideIcon,
+  AlertTriangle, Check, CheckCircle2, ChevronDown, Download, Filter, Loader2, Mail, Plus, Send, Sparkles, TrendingUp, type LucideIcon,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { GREEN, RED, type Severity } from '@/lib/theme';
 import { REPORTING_DOCUMENT_TYPE_LABELS, type ReportingDocumentType } from '@/data';
 import { supabase } from '@/lib/supabase';
 import { fetchDocumentUiRows, UNRESOLVED_SUPPLIER, type DocumentUiRow } from '@/lib/documentRow';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 const tooltipBox = 'rounded-lg bg-[#111a33] px-3.5 py-2.5 text-white shadow-[0_10px_30px_rgba(0,0,0,.3)]';
 const DAY = 86400000;
@@ -27,14 +28,34 @@ interface KpiTile {
   accent: 'default' | 'red';
 }
 
-interface MonthTrend { m: string; inv: number; exc: number; }
-
-// Which document type the "vs. Exceptions" trend chart is scoped to — a filter
-// on the chart itself (mirrors the Exception Types severity filter below it),
-// not a page-wide filter.
+// Which document types the "vs. Exceptions" trend chart is scoped to — a
+// multi-select filter on the chart itself (mirrors the Exception Types severity
+// filter below it), not a page-wide filter. Selecting more than one type puts a
+// bar per type side by side so they can be compared within the same month.
 type TrendDocType = 'purchase_order' | 'grn' | 'invoice';
 const TREND_DOC_TYPES: TrendDocType[] = ['purchase_order', 'grn', 'invoice'];
 const TREND_FILTER_LABELS: Record<TrendDocType, string> = { purchase_order: 'PO', grn: 'GRN', invoice: 'INV' };
+// One hue per document type — separate hues, not shades of navy, so two selected
+// types can never be confused at a glance. A type keeps its hue no matter which
+// combination is selected. Invoice keeps brand navy (it's the default selection,
+// so the usual view is unchanged). Green is avoided (it means "on track"
+// elsewhere on this page) and so are red and orange (red means "exception", and
+// an orange bar sitting next to a red one is exactly the confusion to avoid).
+const TREND_DOC_COLORS: Record<TrendDocType, string> = { purchase_order: '#0E7490', grn: '#7C3AED', invoice: '#1E3A8A' };
+
+// Every document type carries its own exceptions, so each selected type gets a
+// pair of bars: its own hue for documents, RED for that type's exceptions. The
+// pair sits together (see the spacer series below), so which red belongs to
+// which type is read from position, and red keeps meaning exactly one thing.
+const excKey = (t: TrendDocType) => `${t}_exc` as const;
+// Zero-valued series rendered between type pairs — recharts reserves a slot for
+// every Bar, so this buys the gap that visually groups each type with its own
+// exceptions. Recharts has no native sub-grouping.
+const GAP_KEY = '_gap';
+type MonthTrend = { m: string; [GAP_KEY]: number } & Record<TrendDocType | `${TrendDocType}_exc`, number>;
+const emptyMonth = (m: string): MonthTrend => ({
+  m, _gap: 0, purchase_order: 0, grn: 0, invoice: 0, purchase_order_exc: 0, grn_exc: 0, invoice_exc: 0,
+});
 interface ExcTypeCount { label: string; n: number; attn: boolean; }
 interface SupplierCount { name: string; n: number; }
 
@@ -119,25 +140,39 @@ interface RechartsTooltipProps<T> {
   label?: string;
 }
 
-function MonthTooltip({ active, payload, label, docLabel }: RechartsTooltipProps<MonthTrend> & { docLabel: string }) {
+/** Swatch matching a chart bar. */
+function TrendSwatch({ color, size = 8 }: { color: string; size?: number }) {
+  return <span className="flex-none rounded-[2px]" style={{ width: size, height: size, background: color }} />;
+}
+
+function MonthTooltip({ active, payload, label, docTypes }: RechartsTooltipProps<MonthTrend> & { docTypes: TrendDocType[] }) {
   if (!active || !payload?.length) return null;
-  const inv = payload.find((p) => p.dataKey === 'inv')?.value ?? 0;
-  const exc = payload.find((p) => p.dataKey === 'exc')?.value ?? 0;
-  const rate = inv ? ((exc / inv) * 100).toFixed(1) : '0.0';
+  const val = (k: string) => payload.find((p) => p.dataKey === k)?.value ?? 0;
   return (
     <div className={tooltipBox}>
       <div className="mb-1.5 text-[12px] font-bold">{label}</div>
-      <div className="flex items-center gap-2 text-[12px] text-[#c3cce3]">
-        <span className="h-2 w-2 flex-none rounded-[2px] bg-navy2" />
-        {docLabel}
-        <strong className="ml-auto tabular-nums text-white">{inv.toLocaleString('en-US')}</strong>
-      </div>
-      <div className="mt-1 flex items-center gap-2 text-[12px] text-[#c3cce3]">
-        <span className="h-2 w-2 flex-none rounded-[2px]" style={{ background: RED }} />
-        Exceptions
-        <strong className="ml-auto tabular-nums text-white">{exc.toLocaleString('en-US')}</strong>
-      </div>
-      <div className="mt-1.5 border-t border-white/15 pt-1.5 text-[11px] text-[#9fb0d6]">{rate}% exception rate</div>
+      {docTypes.map((t, i) => {
+        const docs = val(t);
+        const exc = val(excKey(t));
+        // Each type carries its own exception rate — that comparison is the
+        // whole point of putting several types on the chart at once.
+        const rate = docs ? ((exc / docs) * 100).toFixed(1) : '0.0';
+        return (
+          <div key={t} className={i ? 'mt-2 border-t border-white/10 pt-2' : undefined}>
+            <div className="flex items-center gap-2 text-[12px] text-[#c3cce3]">
+              <TrendSwatch color={TREND_DOC_COLORS[t]} />
+              {REPORTING_DOCUMENT_TYPE_LABELS[t]}
+              <strong className="ml-auto tabular-nums text-white">{docs.toLocaleString('en-US')}</strong>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[12px] text-[#c3cce3]">
+              <TrendSwatch color={RED} />
+              Exceptions
+              <strong className="ml-auto tabular-nums text-white">{exc.toLocaleString('en-US')}</strong>
+              <span className="tabular-nums text-[11px] text-[#9fb0d6]">({rate}%)</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -166,7 +201,7 @@ export default function ReportingPage() {
   const [cfrom, setCfrom] = useState('');
   const [cto, setCto] = useState('');
   const [severity, setSeverity] = useState<Severity | null>(null);
-  const [trendDocType, setTrendDocType] = useState<TrendDocType>('invoice');
+  const [trendDocTypes, setTrendDocTypes] = useState<TrendDocType[]>(['invoice']);
 
   const [rawEmails, setRawEmails] = useState<EmailRow[]>([]);
   const [rawDocs, setRawDocs] = useState<DocRow[]>([]);
@@ -243,29 +278,53 @@ export default function ReportingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawEmails, rawDocs, rawExcs, winStart, winEnd]);
 
-  // ---- <Doc Type> vs Exceptions monthly trend ----
-  // Scoped by trendDocType (PO / GRN / INV): "invoices" is a documents-table
-  // filter (document_type), but exceptions have no document_type of their own —
-  // they're scoped to the same type via the document_ui_view lookup (uiRowMap),
-  // the same one fetchDocumentUiRows already populates for the exceptions list.
+  // Selected trend types in canonical PO -> GRN -> INV order, so bar order and
+  // legend order stay stable however the user toggled them on.
+  const selectedTrendTypes = useMemo(
+    () => TREND_DOC_TYPES.filter((t) => trendDocTypes.includes(t)),
+    [trendDocTypes],
+  );
+  // Full name for a single type ("Invoice"), short codes once several are
+  // compared ("PO · GRN") so the card title and CSV heading stay short.
+  const trendDocLabel = selectedTrendTypes.length === 1
+    ? REPORTING_DOCUMENT_TYPE_LABELS[selectedTrendTypes[0]]
+    : selectedTrendTypes.map((t) => TREND_FILTER_LABELS[t]).join(' · ');
+  // At least one type always stays selected — an empty chart tells nobody
+  // anything, so the last remaining button is a no-op.
+  const toggleTrendDocType = (t: TrendDocType) =>
+    setTrendDocTypes((prev) => (prev.includes(t) ? (prev.length === 1 ? prev : prev.filter((p) => p !== t)) : [...prev, t]));
+  // Bars thin out as more types are compared, so three types (six bars plus
+  // spacers per month) still fit the card at the same chart height.
+  const barSize = [30, 22, 16][selectedTrendTypes.length - 1] ?? 16;
+
+  // ---- <Doc Types> vs Exceptions monthly trend ----
+  // Scoped by selectedTrendTypes (any of PO / GRN / INV): document counts are a
+  // documents-table filter (document_type), but exceptions have no
+  // document_type of their own — they're attributed to a type via the
+  // document_ui_view lookup (uiRowMap), the same one fetchDocumentUiRows already
+  // populates for the exceptions list. Exceptions are counted per type rather
+  // than pooled, so each selected type shows its own exception load.
   const trend: MonthTrend[] = useMemo(() => {
     const months = new Map<number, MonthTrend>();
-    const bump = (iso: string | null, key: 'inv' | 'exc') => {
+    const bump = (iso: string | null, key: keyof Omit<MonthTrend, 'm'>) => {
       if (!inPeriod(iso)) return;
       const d = new Date(iso as string);
       const mk = d.getFullYear() * 12 + d.getMonth();
-      const e = months.get(mk) ?? { m: MONTH_ABBR[d.getMonth()], inv: 0, exc: 0 };
+      const e = months.get(mk) ?? emptyMonth(MONTH_ABBR[d.getMonth()]);
       e[key] += 1;
       months.set(mk, e);
     };
-    rawDocs.forEach((d) => { if ((d.document_type ?? '').toLowerCase() === trendDocType) bump(d.created_at, 'inv'); });
+    rawDocs.forEach((d) => {
+      const t = (d.document_type ?? '').toLowerCase() as TrendDocType;
+      if (selectedTrendTypes.includes(t)) bump(d.created_at, t);
+    });
     rawExcs.forEach((e) => {
-      const docType = e.document_id ? uiRowMap.get(e.document_id)?.document_type?.toLowerCase() : null;
-      if (docType === trendDocType) bump(e.created_at, 'exc');
+      const t = (e.document_id ? uiRowMap.get(e.document_id)?.document_type?.toLowerCase() : null) as TrendDocType | null;
+      if (t && selectedTrendTypes.includes(t)) bump(e.created_at, excKey(t));
     });
     return [...months.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawDocs, rawExcs, uiRowMap, trendDocType, winStart, winEnd]);
+  }, [rawDocs, rawExcs, uiRowMap, selectedTrendTypes, winStart, winEnd]);
 
   // ---- Exception Types (severity-filtered; severity-weighted attn flag) ----
   const exceptionTypeCounts: ExcTypeCount[] = useMemo(() => {
@@ -330,8 +389,8 @@ export default function ReportingPage() {
 
   // ---- AI Insight (local stub, answers from the data above) ----
   const kpiVal = (key: string) => kpiTiles.find((k) => k.key === key)?.value ?? '0';
-  const totalInv = trend.reduce((s, t) => s + t.inv, 0);
-  const totalExc = trend.reduce((s, t) => s + t.exc, 0);
+  const totalInv = trend.reduce((s, t) => s + selectedTrendTypes.reduce((d, k) => d + t[k], 0), 0);
+  const totalExc = trend.reduce((s, t) => s + selectedTrendTypes.reduce((d, k) => d + t[excKey(k)], 0), 0);
   const excRate = totalInv ? ((totalExc / totalInv) * 100).toFixed(1) : '0.0';
   const topExcType = exceptionTypeCounts[0];
   const topExcSupplier = suppliers[0];
@@ -409,7 +468,11 @@ export default function ReportingPage() {
   const exportCsv = () => {
     downloadReportCsv([
       { title: 'KPI Tiles', headers: ['Label', 'Value', 'Note'], rows: kpiTiles.map((k) => [k.label, k.value, k.sub]) },
-      { title: `${REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} vs Exceptions (by month)`, headers: ['Month', REPORTING_DOCUMENT_TYPE_LABELS[trendDocType], 'Exceptions'], rows: trend.map((t) => [t.m, t.inv, t.exc]) },
+      {
+        title: `${trendDocLabel} vs Exceptions (by month)`,
+        headers: ['Month', ...selectedTrendTypes.flatMap((t) => [REPORTING_DOCUMENT_TYPE_LABELS[t], `${REPORTING_DOCUMENT_TYPE_LABELS[t]} Exceptions`])],
+        rows: trend.map((t) => [t.m, ...selectedTrendTypes.flatMap((k) => [t[k], t[excKey(k)]])]),
+      },
       { title: `Exception Types${severity ? ` (${SEVERITY_LABELS[severity]})` : ''}`, headers: ['Type', 'Count', 'Highest Impact'], rows: exceptionTypeCounts.map((t) => [t.label, t.n, t.attn ? 'Yes' : '']) },
       { title: 'Document Mix', headers: ['Type', 'Count'], rows: documentMix.rows.map((r) => [r.label, r.n]) },
       { title: 'Top Exception Suppliers', headers: ['Supplier', 'Count'], rows: suppliers.map((s) => [s.name, s.n]) },
@@ -418,9 +481,9 @@ export default function ReportingPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Reporting</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <SidebarToggle />
           <p className="text-[13.5px] text-muted-foreground">
             {PERIOD_LABELS[period]} · processing &amp; exception trends
           </p>
@@ -502,36 +565,50 @@ export default function ReportingPage() {
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="rounded-xl border border-border bg-surface p-[18px_20px] shadow-[0_1px_2px_rgba(16,24,40,.04)]">
           <span className="mb-2 block text-[14.5px] font-semibold tracking-tight">
-            {REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} vs. Exceptions
+            {trendDocLabel} vs. Exceptions
           </span>
-          {/* Legend + doc-type filter (PO / GRN / INV) share a row whose width
-              stays constant across filters — the legend uses the same short
-              code as the filter buttons, so this row never wraps and the
-              header height can't shift when the selected type changes. */}
+          {/* Legend + doc-type filter (PO / GRN / INV, multi-select) share a row.
+              The legend names each selected type once plus Exceptions once,
+              rather than listing six entries: hue = document type, red = the
+              exceptions of whichever type it sits beside. Filter buttons carry
+              their type's hue when on, so button and bars read as one object. */}
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              {selectedTrendTypes.map((t) => (
+                <span key={t} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <TrendSwatch color={TREND_DOC_COLORS[t]} size={11} />
+                  {TREND_FILTER_LABELS[t]}
+                </span>
+              ))}
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="h-[11px] w-[11px] rounded-[3px] bg-navy" />{TREND_FILTER_LABELS[trendDocType]}
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="h-[11px] w-[11px] rounded-[3px]" style={{ background: RED }} />Exceptions
+                <TrendSwatch color={RED} size={11} />
+                Exceptions
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {TREND_DOC_TYPES.map((t) => {
-                const on = trendDocType === t;
+                const on = selectedTrendTypes.includes(t);
+                const last = on && selectedTrendTypes.length === 1;
                 return (
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setTrendDocType(t)}
-                    className="pcb-btn h-7 rounded-md px-2.5 text-[11.5px] font-semibold"
+                    aria-pressed={on}
+                    title={last ? 'At least one document type must stay selected' : `${on ? 'Hide' : 'Compare'} ${REPORTING_DOCUMENT_TYPE_LABELS[t]}`}
+                    onClick={() => toggleTrendDocType(t)}
+                    className="pcb-btn flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] font-semibold"
                     style={{
-                      border: `1px solid ${on ? 'var(--navy)' : 'var(--line)'}`,
-                      background: on ? 'var(--navy)' : 'var(--surface)',
+                      border: `1px solid ${on ? TREND_DOC_COLORS[t] : 'var(--line)'}`,
+                      background: on ? TREND_DOC_COLORS[t] : 'var(--surface)',
                       color: on ? '#fff' : 'var(--text3)',
+                      cursor: last ? 'default' : undefined,
                     }}
                   >
+                    {/* Checkbox-ish tick makes it obvious these toggle
+                        independently instead of behaving as radio buttons. */}
+                    <span className="flex" style={{ opacity: on ? 1 : 0.35 }}>
+                      {on ? <Check size={12} strokeWidth={3} /> : <Plus size={12} strokeWidth={3} />}
+                    </span>
                     {TREND_FILTER_LABELS[t]}
                   </button>
                 );
@@ -541,20 +618,34 @@ export default function ReportingPage() {
           {/* Text alternative for screen readers — the bar chart itself has no
               accessible data representation of its own. */}
           <p className="sr-only">
-            {REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} versus exceptions by month:{' '}
-            {trend.length === 0 ? 'no activity in this period.' : trend.map((t) => `${t.m}: ${t.inv} ${REPORTING_DOCUMENT_TYPE_LABELS[trendDocType].toLowerCase()}, ${t.exc} exceptions`).join('; ')}
+            {trendDocLabel} versus exceptions by month:{' '}
+            {trend.length === 0
+              ? 'no activity in this period.'
+              : trend
+                  .map((t) => `${t.m}: ${selectedTrendTypes.map((k) => `${t[k]} ${REPORTING_DOCUMENT_TYPE_LABELS[k].toLowerCase()} with ${t[excKey(k)]} exceptions`).join(', ')}`)
+                  .join('; ')}
           </p>
           <div style={{ height: 254 }} aria-hidden="true">
             {trend.length === 0 ? (
               <div className="flex h-full items-center justify-center text-[12.5px] text-muted-foreground">No activity in this period.</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trend} barGap={5} margin={{ top: 24, right: 0, bottom: 0, left: 0 }}>
+                <BarChart
+                  data={trend}
+                  barGap={3}
+                  barCategoryGap={selectedTrendTypes.length > 1 ? '24%' : '20%'}
+                  margin={{ top: 24, right: 0, bottom: 0, left: 0 }}
+                >
                   <XAxis dataKey="m" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--muted)' }} />
                   <YAxis hide domain={[0, 'dataMax']} />
-                  <Tooltip content={<MonthTooltip docLabel={REPORTING_DOCUMENT_TYPE_LABELS[trendDocType]} />} cursor={{ fill: 'rgba(30,58,138,.06)' }} />
-                  <Bar dataKey="inv" fill="var(--navy)" radius={[5, 5, 0, 0]} maxBarSize={30} />
-                  <Bar dataKey="exc" fill={RED} radius={[5, 5, 0, 0]} maxBarSize={30} />
+                  <Tooltip content={<MonthTooltip docTypes={selectedTrendTypes} />} cursor={{ fill: 'rgba(30,58,138,.06)' }} />
+                  {/* Documents then exceptions per type, with an empty spacer
+                      series between types so each pair reads as one group. */}
+                  {selectedTrendTypes.flatMap((t, i) => [
+                    ...(i ? [<Bar key={`${t}-gap`} dataKey={GAP_KEY} fill="transparent" maxBarSize={10} legendType="none" />] : []),
+                    <Bar key={t} dataKey={t} fill={TREND_DOC_COLORS[t]} radius={[5, 5, 0, 0]} maxBarSize={barSize} />,
+                    <Bar key={excKey(t)} dataKey={excKey(t)} fill={RED} radius={[5, 5, 0, 0]} maxBarSize={barSize} />,
+                  ])}
                 </BarChart>
               </ResponsiveContainer>
             )}

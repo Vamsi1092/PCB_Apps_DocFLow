@@ -5,6 +5,7 @@ import { stages } from '@/data';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/Toast';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 type SettingsKey = 'thresholds' | 'gl' | 'sla' | 'integrations' | 'team' | 'notifications';
 
@@ -340,8 +341,8 @@ export default function SettingsPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-4">
-        <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Settings</h1>
+      <div className="mb-4 flex items-center gap-3">
+        <SidebarToggle />
         <p className="text-[13.5px] text-muted-foreground">Workspace · Acme Corp AP</p>
       </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5">

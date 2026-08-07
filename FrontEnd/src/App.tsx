@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
 import { Sidebar } from '@/components/Sidebar';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { SidebarProvider } from '@/hooks/useSidebar';
 import { activity } from '@/data';
 import DashboardPage from '@/pages/DashboardPage';
 import InboxPage from '@/pages/InboxPage';
@@ -25,6 +26,10 @@ export default function App() {
   // (zero-width) by default, no permanent rail. Persists the user's last
   // state, same pattern as the theme toggle above.
   const [sidebarExpanded, setSidebarExpanded] = useLocalStorage<boolean>('docflow.sidebar.expanded', false);
+  const sidebar = useMemo(
+    () => ({ expanded: sidebarExpanded, toggle: () => setSidebarExpanded((v) => !v) }),
+    [sidebarExpanded, setSidebarExpanded],
+  );
 
   // Notification read-state — shared by TopNav's bell button and Sidebar's
   // Profile-dropdown "Notifications" row, so opening either marks the same
@@ -39,10 +44,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <SidebarProvider value={sidebar}>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <TopNav
-          sidebarExpanded={sidebarExpanded}
-          onToggleSidebar={() => setSidebarExpanded((v) => !v)}
           dark={dark}
           onToggleDark={() => setDark((v) => !v)}
           unreadCount={unreadCount}
@@ -69,6 +73,7 @@ export default function App() {
           </main>
         </div>
       </div>
+      </SidebarProvider>
     </BrowserRouter>
   );
 }

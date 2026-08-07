@@ -248,8 +248,8 @@ export const activity: ActivityEvent[] = [
   { who: 'Autonomy Engine', action: 'extracted 42 documents in', target: 'Batch 8841', when: '2h ago', kind: 'bolt', cat: 'ai' },
   { who: 'You', action: 'created a GL-mapping rule for', target: 'Meridian Utilities', when: '3h ago', kind: 'gear', cat: 'human' },
   { who: 'A. Bianchi', action: 'resolved a duplicate on', target: 'INV-47988', when: '4h ago', kind: 'check', cat: 'human' },
-  { who: 'Autonomy Engine', action: 'auto-coded', target: 'INV-48091', when: '5h ago', kind: 'bolt', cat: 'ai' },
-  { who: 'System', action: 'ran nightly reconciliation on', target: 'Ledger', when: 'Yesterday', kind: 'gear', cat: 'system' },
+  { who: 'Autonomy Engine', action: 'auto-coded a GL entry for', target: 'INV-47950', when: '5h ago', kind: 'bolt', cat: 'ai' },
+  { who: 'System', action: 'archived', target: 'Batch 8790', when: '6h ago', kind: 'gear', cat: 'system' },
 ];
 
 /** The AP team a document can be assigned to. Roster is illustrative for now —

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { AP_DOCUMENT_SELECT, fetchDocumentUiRows, titleCaseDocType, toWorklistRow, type ApDocRow } from '@/lib/documentRow';
 import { fetchLifecycle, stageByName, type LifecycleStageRow } from '@/lib/lifecycle';
 import { fetchMatchingDemoRow, type MatchingDemoRow } from '@/lib/matchingDemo';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 // The three document kinds a reviewer can line up in either pane.
 type DocKind = 'invoice' | 'po' | 'grn';
@@ -424,11 +425,13 @@ export default function DocumentReviewPage() {
       {/* Header bar: back to Worklist + document identity/amount. */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
+          <SidebarToggle />
           <Link to="/worklist" className="pcb-btn inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-text2">
             <ArrowLeft size={16} />
           </Link>
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight">{row.display_id}</h1>
+            {/* h2, not h1 — TopNav renders the page-level heading ('Document Review'). */}
+            <h2 className="text-[20px] font-semibold tracking-tight">{row.display_id}</h2>
             <p className="text-[12.5px] text-muted-foreground">
               {row.supplier} · {titleCaseDocType(row.document_type)} · {fmtMoney(row.amount, row.currency)}
             </p>

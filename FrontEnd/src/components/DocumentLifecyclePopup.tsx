@@ -395,9 +395,6 @@ export function DocumentLifecyclePopup({
           </>
         )}
       </div>
-      <div className="mt-2 border-t pt-1.5 text-[8px] leading-snug" style={{ borderColor: 'rgba(255,255,255,.1)', color: TEXT_FAINTER }}>
-        Live PO → Acknowledgement → GRN → Invoice chain from Supabase.
-      </div>
     </>,
   );
 }

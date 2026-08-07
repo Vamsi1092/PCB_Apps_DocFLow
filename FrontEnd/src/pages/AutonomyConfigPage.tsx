@@ -2,6 +2,7 @@ import { useMemo, Fragment } from 'react';
 import { Eye, Info, Lock, RotateCcw, Zap, type LucideIcon } from 'lucide-react';
 import { docTypes, autonomyStages, autonomyGrid, type AutonomyLevel, type AutonomyCell } from '@/data';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 const ORDER: AutonomyLevel[] = ['auto', 'assist', 'human'];
 
@@ -88,9 +89,9 @@ export default function AutonomyConfigPage() {
 
   return (
     <div className="pcb-view">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Workflow Autonomy</h1>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <SidebarToggle />
           <p className="max-w-[820px] text-[13.5px] leading-[1.55] text-muted-foreground">
             Decide what the AI can do on its own, what it needs your sign-off for, and what always
             stays human. Saved locally on this device.

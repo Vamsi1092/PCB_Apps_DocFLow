@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, CheckCheck, Search, Settings2, User, Zap, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Check, Search, Settings2, User, Zap, type LucideIcon } from 'lucide-react';
 import { GREEN, RED } from '@/lib/theme';
 import { activity, type ActivityCategory, type ActivityKind } from '@/data';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 const KIND_ICON: Record<ActivityKind, LucideIcon> = {
   bolt: Zap,
@@ -19,16 +20,9 @@ const KIND_COLOR: Record<ActivityKind, string> = {
   gear: 'var(--muted)',
 };
 
-const CHIPS: [string, string][] = [
-  ['all', 'All'],
-  ['ai', 'AI'],
-  ['human', 'Human'],
-  ['system', 'System'],
-];
-
 // Activity has no stable id in the underlying static data (src/data.ts) — build
-// one from its own fields so read-state can key off something besides array
-// index (which would shift under filtering/search).
+// one from its own fields so React keys survive filtering/search reordering
+// (an array index would not).
 function activityKey(a: (typeof activity)[number], i: number): string {
   return `${a.who}-${a.action}-${a.target}-${i}`;
 }
@@ -36,13 +30,10 @@ function activityKey(a: (typeof activity)[number], i: number): string {
 export default function ActivityPage() {
   const [filter, setFilter] = useState<'all' | ActivityCategory>('all');
   const [search, setSearch] = useState('');
-  // Session-only read tracking — not persisted; this is sample/demo data, not a
-  // real audit log, so there's nothing to remember across a refresh.
-  const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
 
   const stats = [
     { key: 'all' as const, label: 'Total Events Logged', n: activity.length },
-    { key: 'ai' as const, label: 'AI Actions', n: activity.filter((a) => a.cat === 'ai').length },
+    { key: 'ai' as const, label: 'Automated Actions', n: activity.filter((a) => a.cat === 'ai').length },
     { key: 'human' as const, label: 'Human Actions', n: activity.filter((a) => a.cat === 'human').length },
     { key: 'system' as const, label: 'System Events', n: activity.filter((a) => a.cat === 'system').length },
   ];
@@ -53,28 +44,21 @@ export default function ActivityPage() {
     .filter((a) => filter === 'all' || a.cat === filter)
     .filter((a) => !q || `${a.who} ${a.action} ${a.target}`.toLowerCase().includes(q));
 
-  const unreadCount = rows.filter((a) => !readKeys.has(a._key)).length;
-  const markAllRead = () => setReadKeys(new Set(activity.map((a, i) => activityKey(a, i))));
-
   return (
     <div className="pcb-view">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="mb-[3px] text-[23px] font-semibold tracking-tight">Activity</h1>
-          <p className="text-[13.5px] text-muted-foreground">
-            Sample/demo activity feed — not a persisted audit trail
-          </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <SidebarToggle />
+        <div className="relative min-w-[220px] flex-1 sm:max-w-[320px] sm:flex-none">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search documents, vendors, actions…"
+            aria-label="Search documents, vendors, or actions"
+            className="h-[34px] w-full rounded-lg border border-line bg-surface pl-8 pr-3 text-[12.5px] font-medium text-text2 outline-none placeholder:text-muted-foreground focus:border-navy sm:w-[280px]"
+          />
         </div>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={markAllRead}
-            className="pcb-btn flex h-[32px] items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[12px] font-semibold text-text2"
-          >
-            <CheckCheck size={14} />
-            Mark all read ({unreadCount})
-          </button>
-        )}
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
@@ -100,46 +84,9 @@ export default function ActivityPage() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2.5">
-        <div className="relative flex min-w-[220px] flex-1 items-center">
-          <span className="pointer-events-none absolute left-[13px] flex text-faint">
-            <Search size={16} />
-          </span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search documents, vendors, actions…"
-            aria-label="Search documents, vendors, or actions"
-            className="h-10 w-full rounded-lg border border-line bg-surface pl-[38px] pr-3.5 text-[13.5px] text-foreground"
-          />
-        </div>
-        <div className="flex flex-wrap gap-[7px]">
-          {CHIPS.map(([id, label]) => {
-            const on = filter === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setFilter(id as 'all' | ActivityCategory)}
-                className="pcb-btn h-[38px] whitespace-nowrap rounded-lg px-4 text-[13px] font-semibold"
-                style={{
-                  border: `1px solid ${on ? 'var(--navy)' : 'var(--line)'}`,
-                  background: on ? 'var(--navy)' : 'var(--surface)',
-                  color: on ? '#fff' : 'var(--text3)',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {rows.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-10 text-center text-[13.5px] text-muted-foreground">
-          {search ? `No activity matches "${search}".` : 'No activity in this category.'}
+          No matching activity.
         </div>
       ) : (
         <div
@@ -148,7 +95,6 @@ export default function ActivityPage() {
         >
           {rows.map((a) => {
             const Icon = KIND_ICON[a.kind];
-            const unread = !readKeys.has(a._key);
             return (
               <div key={a._key} className="flex items-center gap-[15px] border-b border-borderf py-3.5">
                 <div
@@ -163,7 +109,6 @@ export default function ActivityPage() {
                   </div>
                   <div className="mt-0.5 text-xs text-faint">{a.when}</div>
                 </div>
-                {unread && <span aria-label="Unread" className="h-[7px] w-[7px] flex-none rounded-full bg-navy" />}
               </div>
             );
           })}
