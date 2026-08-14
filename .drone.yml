@@ -1,0 +1,20 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+
+  - name: frontend-build
+    image: node:22
+    commands:
+      - cd FrontEnd
+      - npm ci
+      - npm run build
+
+  - name: backend-tests
+    image: python:3.13
+    commands:
+      - cd email-intake-backend
+      - pip install --upgrade pip
+      - pip install -r requirements.txt
+      - pytest
